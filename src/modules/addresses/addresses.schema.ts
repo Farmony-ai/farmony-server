@@ -20,7 +20,7 @@ export class Address {
   @Prop({ type: String, required: true })
   village: string;
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String})
   tehsil: string;
 
   @Prop({ type: String, required: true })

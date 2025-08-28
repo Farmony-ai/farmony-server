@@ -27,7 +27,7 @@ export class CreateAddressDto {
   village: string;
 
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
   tehsil: string;
 
   @IsString()
