@@ -99,7 +99,7 @@ export class OrdersService {
   }
 
   // Cron job to auto-reject expired orders - runs every 5 minutes
-  @Cron('*/5 * * * *')
+  // @Cron('*/5 * * * *')
   async checkAndAutoRejectExpiredOrders() {
     const now = new Date();
     
