@@ -42,6 +42,14 @@ export class CreateListingDto {
 
   @IsMongoId()
   subCategoryId: string;
+  
+  @IsString()
+  @IsOptional()
+  category?: string;
+  
+  @IsString()
+  @IsOptional()
+  subcategory?: string;
 
   @IsArray()
   @IsOptional()

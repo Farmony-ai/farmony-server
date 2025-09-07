@@ -14,6 +14,8 @@ export class UsersController {
       name: user.name, 
       email: user.email, 
       phone: user.phone, 
+      gender: user.gender,
+      dateOfBirth: user.dateOfBirth,
       role: user.role,
       isVerified: user.isVerified,
       kycStatus: user.kycStatus
@@ -31,6 +33,8 @@ export class UsersController {
         name: user.name,
         email: user.email,
         phone: user.phone,
+        gender: user.gender,
+        dateOfBirth: user.dateOfBirth,
         role: user.role,
         isVerified: user.isVerified,
         kycStatus: user.kycStatus

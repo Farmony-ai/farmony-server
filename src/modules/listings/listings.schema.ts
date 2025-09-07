@@ -19,6 +19,12 @@ export class Listing {
 
   @Prop({ type: Types.ObjectId, ref: 'Catalogue', required: true })
   subCategoryId: Types.ObjectId;
+  
+  @Prop({ type: String })
+  category: string;
+  
+  @Prop({ type: String })
+  subcategory: string;
 
   @Prop({ type: [String], default: [] })
   photos: string[];

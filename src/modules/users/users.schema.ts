@@ -37,6 +37,14 @@ export class User {
   @Prop({ type: String, required: true })
   phone: string;
 
+  // Optional gender field to capture user's gender in plain words
+  @Prop({ type: String, enum: ['male','female','other','prefer_not_to_say'], required: false })
+  gender?: string;
+
+  // Optional date of birth field; stored as a Date
+  @Prop({ type: Date, required: false })
+  dateOfBirth?: Date;
+
   @Prop({ type: String, required: true, enum: ['individual','SHG','FPO','admin'] })
   role: string;
 
