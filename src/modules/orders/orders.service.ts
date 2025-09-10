@@ -133,4 +133,14 @@ export class OrdersService {
 
     return validTransitions[currentStatus]?.includes(newStatus) || false;
   }
+
+  async findByProviderPopulated(providerId: string): Promise<any[]> {
+    return this.orderModel
+      .find({ providerId })
+      .populate('seekerId', 'name email phone address coordinates')
+      .populate('listingId', 'title description price unitOfMeasure images category')
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
+  }
 }

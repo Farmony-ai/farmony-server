@@ -35,7 +35,7 @@ import { AwsModule } from './modules/aws/aws.module';
             : cfg.get<string>('MONGO_URI_DEV'),
       }),
     }),
-    ScheduleModule.forRoot(), // For cron jobs
+    // ScheduleModule.forRoot(), // For cron jobs
     UsersModule,
     AuthModule,
     KycModule,

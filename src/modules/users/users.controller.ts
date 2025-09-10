@@ -1,6 +1,7 @@
 import { Controller, Get, Param, Patch, Body } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 
 @Controller('users')
 export class UsersController {
@@ -18,7 +19,20 @@ export class UsersController {
       dateOfBirth: user.dateOfBirth,
       role: user.role,
       isVerified: user.isVerified,
-      kycStatus: user.kycStatus
+      kycStatus: user.kycStatus,
+      // Expose user preferences so frontend can render and manage them
+      preferences: user.preferences,
+      // Also expose defaultAddressId for completeness
+      defaultAddressId: user.defaultAddressId
+    };
+  }
+
+  // 🎯 Get only the user's preferences
+  @Get(':id/preferences')
+  async getUserPreferences(@Param('id') id: string) {
+    const user = await this.usersService.findById(id);
+    return {
+      preferences: user.preferences
     };
   }
 
@@ -39,6 +53,19 @@ export class UsersController {
         isVerified: user.isVerified,
         kycStatus: user.kycStatus
       }
+    };
+  }
+
+  // 🛠️ Update only the user's preferences (safe and isolated)
+  @Patch(':id/preferences')
+  async updatePreferences(
+    @Param('id') id: string,
+    @Body() preferencesDto: UpdatePreferencesDto
+  ) {
+    const user = await this.usersService.updatePreferences(id, preferencesDto);
+    return {
+      message: 'Preferences updated successfully',
+      preferences: user.preferences
     };
   }
 
