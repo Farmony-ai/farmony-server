@@ -1,4 +1,4 @@
-import { IsBoolean, IsOptional, IsString, IsIn, IsMongoId, ValidateNested, IsEmail } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, IsIn, IsMongoId, ValidateNested, IsEmail , IsDateString } from 'class-validator';
 import { Type } from 'class-transformer';
 import { UpdatePreferencesDto } from './update-preferences.dto';
 
