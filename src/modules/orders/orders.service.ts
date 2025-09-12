@@ -98,29 +98,29 @@ export class OrdersService {
     return { totalOrders, fulfilledOrders, revenue };
   }
 
-  // Cron job to auto-reject expired orders - runs every 5 minutes
-  @Cron('*/5 * * * *')
-  async checkAndAutoRejectExpiredOrders() {
-    const now = new Date();
+  // // Cron job to auto-reject expired orders - runs every 5 minutes
+  // @Cron('*/5 * * * *')
+  // async checkAndAutoRejectExpiredOrders() {
+  //   const now = new Date();
     
-    const result = await this.orderModel.updateMany(
-      {
-        status: OrderStatus.PENDING,
-        requestExpiresAt: { $lt: now },
-        isAutoRejected: false
-      },
-      {
-        status: OrderStatus.CANCELED,
-        isAutoRejected: true,
-        canceledAt: now,
-        cancellationReason: 'Auto-rejected: Provider did not respond within 2 hours'
-      }
-    );
+  //   const result = await this.orderModel.updateMany(
+  //     {
+  //       status: OrderStatus.PENDING,
+  //       requestExpiresAt: { $lt: now },
+  //       isAutoRejected: false
+  //     },
+  //     {
+  //       status: OrderStatus.CANCELED,
+  //       isAutoRejected: true,
+  //       canceledAt: now,
+  //       cancellationReason: 'Auto-rejected: Provider did not respond within 2 hours'
+  //     }
+  //   );
 
-    if (result.modifiedCount > 0) {
-      console.log(`Auto-rejected ${result.modifiedCount} expired orders`);
-    }
-  }
+  //   if (result.modifiedCount > 0) {
+  //     console.log(`Auto-rejected ${result.modifiedCount} expired orders`);
+  //   }
+  // }
 
   private isValidStatusTransition(currentStatus: string, newStatus: string): boolean {
     const validTransitions: Record<string, string[]> = {
