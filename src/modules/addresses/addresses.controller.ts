@@ -3,7 +3,8 @@ import { AddressesService } from './addresses.service';
 import { CreateAddressDto } from './dto/create-address.dto';
 import { UpdateAddressDto } from './dto/update-address.dto';
 import { AuthGuard } from '@nestjs/passport';
-
+import { ApiTags } from '@nestjs/swagger';
+@ApiTags('Addresses') 
 @Controller('addresses')
 // @UseGuards(AuthGuard('jwt'))
 export class AddressesController {

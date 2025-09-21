@@ -31,7 +31,7 @@ export class ProvidersService {
     try {
       // Get provider details for location
       const provider = await this.usersService.findById(providerId);
-      const providerCoordinates = provider?.coordinates || provider?.address?.coordinates || null;
+      const providerCoordinates = (provider as any)?.coordinates || (provider as any)?.address?.coordinates || null;
       
       // Get summary statistics
       const summary = await this.ordersService.getProviderSummary(providerId);
@@ -69,11 +69,12 @@ export class ProvidersService {
             console.error(`Failed to fetch listing ${booking.listingId}:`, error);
           }
           
-          return {
-            ...booking.toObject ? booking.toObject() : booking,
+          const enhanced = {
+            ...(booking as any).toObject ? (booking as any).toObject() : booking,
             seekerDetails,
             listingDetails
           };
+          return enhanced;
         })
       );
 

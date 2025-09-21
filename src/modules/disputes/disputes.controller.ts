@@ -15,7 +15,8 @@ import { CreateDisputeDto } from './dto/create-dispute.dto';
 import { ResolveDisputeDto } from './dto/resolve-dispute.dto';
 import { AddMessageDto } from './dto/add-message.dto';
 import { DisputeStatus } from './disputes.schema';
-
+import { ApiTags } from '@nestjs/swagger';
+@ApiTags('Disputes') 
 @Controller('disputes')
 @UseGuards(AuthGuard('jwt'))
 export class DisputesController {

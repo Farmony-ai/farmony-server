@@ -40,69 +40,95 @@ export class ListingsService {
   ) {}
 
   async create(dto: CreateListingDto, files: Array<Express.Multer.File> = []): Promise<any> {
-    // Validate providerId
-    if (!dto.providerId || !Types.ObjectId.isValid(dto.providerId)) {
-      throw new BadRequestException('Invalid provider ID');
-    }
+  // Validate providerId
+  if (!dto.providerId || !Types.ObjectId.isValid(dto.providerId)) {
+    throw new BadRequestException('Invalid provider ID');
+  }
 
-    // Upload files and get S3 keys
-    const photoKeys = files && files.length > 0 
-      ? await Promise.all(
-          files.map(file => this.s3Service.uploadFile(file, 'listings'))
-        )
-      : [];
-    
-    console.log('Photo keys:', photoKeys);
+  // Upload files and get S3 keys
+  const photoKeys = files && files.length > 0 
+    ? await Promise.all(
+        files.map(file => this.s3Service.uploadFile(file, 'listings'))
+      )
+    : [];
+  
+  console.log('Photo keys:', photoKeys);
 
-    // Handle location data
-    let locationData;
+  // Handle location data
+  let locationData;
+  
+  // Check if coordinates are provided and valid (must have exactly 2 values)
+  const hasValidCoordinates = (coords: any): boolean => {
+    return Array.isArray(coords) && 
+           coords.length === 2 && 
+           typeof coords[0] === 'number' && 
+           typeof coords[1] === 'number' &&
+           !isNaN(coords[0]) && 
+           !isNaN(coords[1]);
+  };
+
+  // Check dto.location.coordinates first
+  if (dto.location && hasValidCoordinates(dto.location.coordinates)) {
+    locationData = {
+      type: 'Point',
+      coordinates: dto.location.coordinates
+    };
+  } 
+  // Check dto.coordinates
+  else if (hasValidCoordinates((dto as any).coordinates)) {
+    locationData = {
+      type: 'Point',
+      coordinates: (dto as any).coordinates
+    };
+  } 
+  // No valid coordinates provided, fetch from user's default address
+  else {
+    console.log('No valid coordinates provided, fetching user default address...');
     
-    if (dto.location && dto.location.coordinates) {
+    const user = await this.usersService.getUserWithAddress(dto.providerId);
+    
+    if (user.defaultAddressId && hasValidCoordinates(user.defaultAddressId.coordinates)) {
+      console.log('Using user default address coordinates:', user.defaultAddressId.coordinates);
       locationData = {
         type: 'Point',
-        coordinates: dto.location.coordinates
-      };
-    } else if ((dto as any).coordinates) {
-      locationData = {
-        type: 'Point',
-        coordinates: (dto as any).coordinates
+        coordinates: user.defaultAddressId.coordinates
       };
     } else {
-      console.log('No location provided, fetching user default address...');
+      // Try to get first address from user's addresses
+      const userAddresses = await this.addressesService.findAllByUser(dto.providerId);
       
-      const user = await this.usersService.getUserWithAddress(dto.providerId);
+      const validAddress = userAddresses.find(addr => hasValidCoordinates(addr.coordinates));
       
-      if (user.defaultAddressId && user.defaultAddressId.coordinates) {
-        console.log('Using user default address coordinates:', user.defaultAddressId.coordinates);
+      if (validAddress) {
+        console.log('Using user address coordinates:', validAddress.coordinates);
         locationData = {
           type: 'Point',
-          coordinates: user.defaultAddressId.coordinates
+          coordinates: validAddress.coordinates
         };
       } else {
-        const userAddresses = await this.addressesService.findAllByUser(dto.providerId);
-        if (userAddresses.length > 0 && userAddresses[0].coordinates) {
-          console.log('Using user first address coordinates:', userAddresses[0].coordinates);
-          locationData = {
-            type: 'Point',
-            coordinates: userAddresses[0].coordinates
-          };
-        } else {
-          throw new BadRequestException('No address found for user. Please add an address to your profile first.');
-        }
+        throw new BadRequestException(
+          'No valid address found for user. Please add an address with valid coordinates to your profile first.'
+        );
       }
     }
-
-    const listing = new this.listingModel({
-      ...dto,
-      photos: photoKeys,
-      location: locationData
-    });
-    
-    const saved = await listing.save();
-    
-    // Return with public URLs (no async needed!)
-    return this.transformWithPublicUrls(saved);
   }
+
+  // Validate final location data before saving
+  if (!locationData || !hasValidCoordinates(locationData.coordinates)) {
+    throw new BadRequestException('Unable to determine valid location coordinates for the listing');
+  }
+
+  const listing = new this.listingModel({
+    ...dto,
+    photos: photoKeys,
+    location: locationData
+  });
+  
+  const saved = await listing.save();
+  
+  // Return with public URLs (no async needed!)
+  return this.transformWithPublicUrls(saved);
+}
 
   async findAll(filters?: SearchFilters): Promise<any[]> {
     try {
@@ -381,36 +407,52 @@ export class ListingsService {
   }
 
   async update(id: string, dto: UpdateListingDto): Promise<any> {
-    if (!Types.ObjectId.isValid(id)) {
-      throw new BadRequestException('Invalid listing ID');
-    }
-
-    const updateData: any = { ...dto };
-    
-    if (dto.location && dto.location.coordinates) {
-      updateData.location = {
-        type: 'Point',
-        coordinates: dto.location.coordinates
-      };
-    } else if ((dto as any).coordinates) {
-      updateData.location = {
-        type: 'Point',
-        coordinates: (dto as any).coordinates
-      };
-      delete updateData.coordinates;
-    }
-
-    const updated = await this.listingModel
-      .findByIdAndUpdate(id, updateData, { new: true })
-      .populate('categoryId')
-      .populate('subCategoryId')
-      .populate('providerId')
-      .exec();
-      
-    if (!updated) throw new NotFoundException('Listing not found');
-    
-    return this.transformWithPublicUrls(updated);
+  if (!Types.ObjectId.isValid(id)) {
+    throw new BadRequestException('Invalid listing ID');
   }
+
+  // Helper function to validate coordinates
+  const hasValidCoordinates = (coords: any): boolean => {
+    return Array.isArray(coords) && 
+           coords.length === 2 && 
+           typeof coords[0] === 'number' && 
+           typeof coords[1] === 'number' &&
+           !isNaN(coords[0]) && 
+           !isNaN(coords[1]);
+  };
+
+  const updateData: any = { ...dto };
+  
+  // Only update location if valid coordinates are provided
+  if (dto.location && hasValidCoordinates(dto.location.coordinates)) {
+    updateData.location = {
+      type: 'Point',
+      coordinates: dto.location.coordinates
+    };
+  } else if (hasValidCoordinates((dto as any).coordinates)) {
+    updateData.location = {
+      type: 'Point',
+      coordinates: (dto as any).coordinates
+    };
+    delete updateData.coordinates;
+  } else if (dto.location || (dto as any).coordinates) {
+    // If location update was attempted but coordinates are invalid, remove it
+    delete updateData.location;
+    delete updateData.coordinates;
+    console.warn('Invalid coordinates provided for update, skipping location update');
+  }
+
+  const updated = await this.listingModel
+    .findByIdAndUpdate(id, updateData, { new: true })
+    .populate('categoryId')
+    .populate('subCategoryId')
+    .populate('providerId')
+    .exec();
+    
+  if (!updated) throw new NotFoundException('Listing not found');
+  
+  return this.transformWithPublicUrls(updated);
+}
 
   async delete(id: string): Promise<Listing> {
     if (!Types.ObjectId.isValid(id)) {
@@ -636,4 +678,20 @@ export class ListingsService {
       photoUrls: this.s3Service.getPublicUrls(listing.photos)
     };
   }
+
+  /**
+ * Validates if coordinates are in the correct format for MongoDB geospatial Point
+ * @param coords - The coordinates to validate
+ * @returns true if coordinates are valid [longitude, latitude] format
+ */
+private hasValidCoordinates(coords: any): boolean {
+  return Array.isArray(coords) && 
+         coords.length === 2 && 
+         typeof coords[0] === 'number' && 
+         typeof coords[1] === 'number' &&
+         !isNaN(coords[0]) && 
+         !isNaN(coords[1]) &&
+         coords[0] >= -180 && coords[0] <= 180 && // Valid longitude range
+         coords[1] >= -90 && coords[1] <= 90;     // Valid latitude range
+}
 }

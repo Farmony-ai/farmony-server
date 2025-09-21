@@ -3,7 +3,8 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { KycService } from './kyc.service';
 import { CreateKycDocumentDto } from './dto/create-kyc-document.dto';
 import { UpdateKycStatusDto } from './dto/update-kyc-status.dto';
-
+import { ApiTags } from '@nestjs/swagger';
+@ApiTags('KYC') 
 @Controller('kyc')
 export class KycController {
   constructor(private readonly kycService: KycService) {}

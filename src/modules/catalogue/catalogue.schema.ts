@@ -1,3 +1,4 @@
+// src/modules/catalogue/catalogue.schema.ts
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 
@@ -39,10 +40,10 @@ export class Catalogue {
   transactionType: TransactionType;
 
   @Prop({ type: Types.ObjectId, ref: 'Catalogue', default: null })
-  parentId: Types.ObjectId | null; // For subcategories
+  parentId: Types.ObjectId | null;
 
   @Prop({ type: String })
-  icon: string; // Icon URL or class name
+  icon: string;
 
   @Prop({ type: Boolean, default: true })
   isActive: boolean;
@@ -58,8 +59,10 @@ export class Catalogue {
 
   @Prop({ type: Number })
   suggestedMaxPrice?: number;
-    private _id: any;
-    id: any;
+  
+  // REMOVE THESE LINES - They're causing the conflict!
+  // private _id: any;  ❌ DELETE THIS
+  // id: any;           ❌ DELETE THIS
 }
 
 export const CatalogueSchema = SchemaFactory.createForClass(Catalogue);
