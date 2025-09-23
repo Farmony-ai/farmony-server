@@ -18,6 +18,7 @@ import { MessagesModule } from './modules/messages/messages.module';
 import { DisputesModule } from './modules/disputes/disputes.module';
 import databaseConfig from './config/database.config';
 import { AwsModule } from './modules/aws/aws.module';
+import { MatchesModule } from './modules/matches/matches.module';
 
 @Module({
   imports: [
@@ -50,7 +51,8 @@ import { AwsModule } from './modules/aws/aws.module';
     ChatModule,
     MessagesModule,
     DisputesModule,
-    AwsModule
+    AwsModule,
+    MatchesModule,
   ],
 })
 export class AppModule {}
