@@ -5,8 +5,11 @@
   "main": "src/main.ts",
   "scripts": {
     "start": "cross-env NODE_ENV=prod node dist/main.js",
-    "start:dev": "cross-env NODE_ENV=dev ts-node-dev --respawn --transpile-only src/main.ts",
-    "build": "tsc -p tsconfig.json",
+    "start:dev": "cross-env NODE_ENV=dev nest start --watch ",
+    "start:debug": "cross-env NODE_ENV=dev nest start --debug --watch",
+    "start:prod": "cross-env NODE_ENV=prod node dist/main",
+    "build": "nest build", 
+    "start:dev:old": "cross-env NODE_ENV=dev ts-node-dev --respawn --transpile-only src/main.ts" ,
     "test": "cross-env NODE_ENV=test jest",
     "cleanup:listings": "ts-node src/scripts/cleanup-invalid-listings.ts"
   },
@@ -25,6 +28,7 @@
     "@nestjs/platform-express": "^11.1.3",
     "@nestjs/platform-socket.io": "^11.1.4",
     "@nestjs/schedule": "^6.0.0",
+    "@nestjs/swagger": "^11.2.0",
     "@nestjs/websockets": "^11.1.4",
     "axios": "^1.11.0",
     "bcrypt": "^6.0.0",
@@ -36,10 +40,11 @@
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "socket.io": "^4.8.1",
+    "swagger-ui-express": "^5.0.1",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
-    "@nestjs/cli": "^11.0.7",
+    "@nestjs/cli": "^11.0.10",
     "@nestjs/testing": "^11.1.5",
     "@types/bcrypt": "^5.0.2",
     "@types/jest": "^30.0.0",

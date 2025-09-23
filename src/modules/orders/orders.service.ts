@@ -98,29 +98,29 @@ export class OrdersService {
     return { totalOrders, fulfilledOrders, revenue };
   }
 
-  // Cron job to auto-reject expired orders - runs every 5 minutes
-  @Cron('*/5 * * * *')
-  async checkAndAutoRejectExpiredOrders() {
-    const now = new Date();
+  // // Cron job to auto-reject expired orders - runs every 5 minutes
+  // @Cron('*/5 * * * *')
+  // async checkAndAutoRejectExpiredOrders() {
+  //   const now = new Date();
     
-    const result = await this.orderModel.updateMany(
-      {
-        status: OrderStatus.PENDING,
-        requestExpiresAt: { $lt: now },
-        isAutoRejected: false
-      },
-      {
-        status: OrderStatus.CANCELED,
-        isAutoRejected: true,
-        canceledAt: now,
-        cancellationReason: 'Auto-rejected: Provider did not respond within 2 hours'
-      }
-    );
+  //   const result = await this.orderModel.updateMany(
+  //     {
+  //       status: OrderStatus.PENDING,
+  //       requestExpiresAt: { $lt: now },
+  //       isAutoRejected: false
+  //     },
+  //     {
+  //       status: OrderStatus.CANCELED,
+  //       isAutoRejected: true,
+  //       canceledAt: now,
+  //       cancellationReason: 'Auto-rejected: Provider did not respond within 2 hours'
+  //     }
+  //   );
 
-    if (result.modifiedCount > 0) {
-      console.log(`Auto-rejected ${result.modifiedCount} expired orders`);
-    }
-  }
+  //   if (result.modifiedCount > 0) {
+  //     console.log(`Auto-rejected ${result.modifiedCount} expired orders`);
+  //   }
+  // }
 
   private isValidStatusTransition(currentStatus: string, newStatus: string): boolean {
     const validTransitions: Record<string, string[]> = {
@@ -139,6 +139,29 @@ export class OrdersService {
       .find({ providerId })
       .populate('seekerId', 'name email phone address coordinates')
       .populate('listingId', 'title description price unitOfMeasure images category')
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
+  }
+
+  async findBySeekerPopulated(seekerId: string): Promise<any[]> {
+    return this.orderModel
+      .find({ seekerId })
+      .populate('providerId', 'name email phone address coordinates')
+      .populate({
+        path: 'listingId',
+        select: 'title categoryId subCategoryId price unitOfMeasure images',
+        populate: [
+          {
+            path: 'categoryId',
+            select: 'name description'
+          },
+          {
+            path: 'subCategoryId',
+            select: 'name description'
+          }
+        ]
+      })
       .sort({ createdAt: -1 })
       .lean()
       .exec();

@@ -5,7 +5,8 @@ import { CreateListingDto } from './dto/create-listing.dto';
 import { UpdateListingDto } from './dto/update-listing.dto';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { OptionalAuthGuard } from '../../common/guards/optional-auth.guard';
-
+import { ApiTags } from '@nestjs/swagger';
+@ApiTags('Listings') 
 @Controller('listings')
 export class ListingsController {
   constructor(private readonly svc: ListingsService) {}

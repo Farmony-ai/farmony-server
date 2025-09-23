@@ -31,7 +31,7 @@ export class User {
 
   
 
-  @Prop({ type: String, required: true })
+  @Prop({ type: String })
   password: string;
 
   @Prop({ type: String, required: true })
@@ -51,6 +51,12 @@ export class User {
 
   @Prop({ type: Types.ObjectId, ref: 'Address' })
   defaultAddressId: Types.ObjectId;
+
+  @Prop({ type: [Number], index: '2dsphere' })
+  coordinates?: number[];  // Add this if missing
+
+  @Prop({ type: String })
+  profilePicture?: string;  // S3 key for profile picture
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
