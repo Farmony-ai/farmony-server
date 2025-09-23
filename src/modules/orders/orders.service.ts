@@ -143,4 +143,27 @@ export class OrdersService {
       .lean()
       .exec();
   }
+
+  async findBySeekerPopulated(seekerId: string): Promise<any[]> {
+    return this.orderModel
+      .find({ seekerId })
+      .populate('providerId', 'name email phone address coordinates')
+      .populate({
+        path: 'listingId',
+        select: 'title categoryId subCategoryId price unitOfMeasure images',
+        populate: [
+          {
+            path: 'categoryId',
+            select: 'name description'
+          },
+          {
+            path: 'subCategoryId',
+            select: 'name description'
+          }
+        ]
+      })
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
+  }
 }

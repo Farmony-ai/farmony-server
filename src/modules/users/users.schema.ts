@@ -54,6 +54,9 @@ export class User {
 
   @Prop({ type: [Number], index: '2dsphere' })
   coordinates?: number[];  // Add this if missing
+
+  @Prop({ type: String })
+  profilePicture?: string;  // S3 key for profile picture
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

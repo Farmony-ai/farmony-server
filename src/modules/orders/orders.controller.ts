@@ -20,7 +20,7 @@ export class OrdersController {
 
   @Get('seeker/:seekerId')
   findBySeeker(@Param('seekerId') seekerId: string) {
-    return this.svc.findBySeeker(seekerId);
+    return this.svc.findBySeekerPopulated(seekerId);
   }
 
   @Get('provider/:providerId')
