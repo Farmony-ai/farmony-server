@@ -1,4 +1,5 @@
 import { IsString, IsNotEmpty, IsEnum, IsArray, ArrayMinSize, IsNumber, IsBoolean, IsOptional, IsMongoId } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export enum AddressTag {
   HOME = 'home',
@@ -42,6 +43,11 @@ export class CreateAddressDto {
   @IsNotEmpty()
   pincode: string;
 
+  @ApiProperty({
+    type: [Number],
+    description: 'Coordinates as [longitude, latitude]',
+    example: [77.1025, 28.7041]
+  })
   @IsArray()
   @ArrayMinSize(2)
   @IsNumber({}, { each: true })

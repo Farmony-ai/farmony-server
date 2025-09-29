@@ -1,0 +1,75 @@
+### Test Service Requests API
+# This file tests the new service request endpoints
+
+@baseUrl = http://localhost:3000
+@token = YOUR_JWT_TOKEN_HERE
+
+### Create a service request
+POST {{baseUrl}}/service-requests
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "categoryId": "507f1f77bcf86cd799439011",
+  "title": "Need tractor for field plowing",
+  "description": "I need a tractor with driver for plowing 5 acres of land",
+  "location": {
+    "lat": 28.6139,
+    "lon": 77.2090
+  },
+  "address": "Village Road, Near Temple, Haryana",
+  "serviceStartDate": "2024-10-15T08:00:00Z",
+  "serviceEndDate": "2024-10-15T18:00:00Z",
+  "budget": {
+    "min": 2000,
+    "max": 5000
+  },
+  "urgency": "scheduled",
+  "metadata": {
+    "quantity": 5,
+    "unitOfMeasure": "acres",
+    "duration": 10,
+    "specialRequirements": ["Experienced driver", "Modern equipment preferred"]
+  },
+  "expiresInHours": 48
+}
+
+### Get my service requests as seeker
+GET {{baseUrl}}/service-requests/my-requests
+Authorization: Bearer {{token}}
+
+### Get available requests as provider
+GET {{baseUrl}}/service-requests/available
+Authorization: Bearer {{token}}
+
+### Get all service requests (with filters)
+GET {{baseUrl}}/service-requests?status=open&page=1&limit=20
+Authorization: Bearer {{token}}
+
+### Get specific service request
+GET {{baseUrl}}/service-requests/{requestId}
+Authorization: Bearer {{token}}
+
+### Accept a service request as provider
+POST {{baseUrl}}/service-requests/{requestId}/accept
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "price": 3500,
+  "message": "I have a new John Deere tractor and 10 years experience. Can complete the work efficiently.",
+  "estimatedCompletionTime": "8 hours"
+}
+
+### Cancel a service request as seeker
+POST {{baseUrl}}/service-requests/{requestId}/cancel
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "reason": "Found alternative arrangement"
+}
+
+### Expire old requests (admin endpoint)
+POST {{baseUrl}}/service-requests/expire-old
+Authorization: Bearer {{token}}

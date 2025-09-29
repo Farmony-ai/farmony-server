@@ -1,4 +1,5 @@
 import { IsMongoId, IsEnum, IsDateString, IsNumber, ArrayMinSize, IsArray, IsOptional, IsString } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { OrderType } from '../orders.schema';
 
 export enum OrderStatus {
@@ -41,6 +42,11 @@ export class CreateOrderDto {
   @IsOptional()
   unitOfMeasure?: string;
 
+  @ApiPropertyOptional({
+    type: [Number],
+    description: 'Service location coordinates as [longitude, latitude]',
+    example: [77.1025, 28.7041]
+  })
   @IsArray()
   @ArrayMinSize(2)
   @IsNumber({}, { each: true })

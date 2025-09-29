@@ -6,13 +6,17 @@ export type OrderDocument = Order & Document;
 export enum OrderType {
   RENTAL = 'rental',
   HIRING = 'hiring',
-  PURCHASE = 'purchase'
+  PURCHASE = 'purchase',
+  SERVICE = 'service'
 }
 
 @Schema({ timestamps: true })
 export class Order {
-  @Prop({ type: Types.ObjectId, ref: 'Listing', required: true })
-  listingId: Types.ObjectId;
+  @Prop({ type: Types.ObjectId, ref: 'Listing' })
+  listingId?: Types.ObjectId;
+
+  @Prop({ type: String, ref: 'ServiceRequest' })
+  serviceRequestId?: string;
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   seekerId: Types.ObjectId;
@@ -20,8 +24,20 @@ export class Order {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   providerId: Types.ObjectId;
 
+  @Prop({ type: Types.ObjectId, ref: 'Category' })
+  categoryId?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'SubCategory' })
+  subCategoryId?: Types.ObjectId;
+
   @Prop({ type: String, required: true, enum: ['pending','accepted','paid','completed','canceled'] })
   status: string;
+
+  @Prop({ type: String })
+  description?: string;
+
+  @Prop({ type: Object })
+  metadata?: Record<string, any>;
 
   @Prop({ type: String, enum: Object.values(OrderType), required: true })
   orderType: OrderType;

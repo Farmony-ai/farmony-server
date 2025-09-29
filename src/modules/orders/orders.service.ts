@@ -13,14 +13,51 @@ export class OrdersService {
   async create(dto: CreateOrderDto): Promise<Order> {
     const now = new Date();
     const requestExpiresAt = new Date(now.getTime() + 2 * 60 * 60 * 1000); // 2 hours from now
-    
-    const order = new this.orderModel({ 
-      ...dto, 
+
+    const order = new this.orderModel({
+      ...dto,
       createdAt: now,
       requestExpiresAt,
       status: OrderStatus.PENDING
     });
-    
+
+    return order.save();
+  }
+
+  async createFromServiceRequest(data: {
+    seekerId: string;
+    providerId: string;
+    serviceRequestId: string;
+    categoryId: string;
+    subCategoryId?: string;
+    totalAmount: number;
+    coordinates: number[];
+    serviceStartDate: Date;
+    serviceEndDate: Date;
+    description: string;
+    metadata?: any;
+  }): Promise<Order> {
+    const now = new Date();
+    const requestExpiresAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+
+    const order = new this.orderModel({
+      seekerId: data.seekerId,
+      providerId: data.providerId,
+      serviceRequestId: data.serviceRequestId,
+      categoryId: data.categoryId,
+      subCategoryId: data.subCategoryId,
+      totalAmount: data.totalAmount,
+      coordinates: data.coordinates,
+      serviceStartDate: data.serviceStartDate,
+      serviceEndDate: data.serviceEndDate,
+      description: data.description,
+      metadata: data.metadata,
+      createdAt: now,
+      requestExpiresAt,
+      status: OrderStatus.PENDING,
+      orderType: 'service',
+    });
+
     return order.save();
   }
 

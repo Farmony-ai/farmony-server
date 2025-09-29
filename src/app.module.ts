@@ -19,6 +19,7 @@ import { DisputesModule } from './modules/disputes/disputes.module';
 import databaseConfig from './config/database.config';
 import { AwsModule } from './modules/aws/aws.module';
 import { MatchesModule } from './modules/matches/matches.module';
+import { ServiceRequestsModule } from './modules/service-requests/service-requests.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { MatchesModule } from './modules/matches/matches.module';
     DisputesModule,
     AwsModule,
     MatchesModule,
+    ServiceRequestsModule,
   ],
 })
 export class AppModule {}
