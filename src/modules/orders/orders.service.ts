@@ -27,7 +27,8 @@ export class OrdersService {
   async createFromServiceRequest(data: {
     seekerId: string;
     providerId: string;
-    serviceRequestId: string;
+    listingId?: string;
+    serviceRequestId?: string;
     categoryId: string;
     subCategoryId?: string;
     totalAmount: number;
@@ -35,31 +36,36 @@ export class OrdersService {
     serviceStartDate: Date;
     serviceEndDate: Date;
     description: string;
+    quantity?: number;
+    unitOfMeasure?: string;
     metadata?: any;
   }): Promise<Order> {
     const now = new Date();
-    const requestExpiresAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+    const requestExpiresAt = new Date(now.getTime() + 2 * 60 * 60 * 1000); // 2 hours
 
     const order = new this.orderModel({
-      seekerId: data.seekerId,
-      providerId: data.providerId,
+      seekerId: new Types.ObjectId(data.seekerId),
+      providerId: new Types.ObjectId(data.providerId),
+      listingId: data.listingId ? new Types.ObjectId(data.listingId) : undefined,
       serviceRequestId: data.serviceRequestId,
-      categoryId: data.categoryId,
-      subCategoryId: data.subCategoryId,
+      categoryId: data.categoryId ? new Types.ObjectId(data.categoryId) : undefined,
+      subCategoryId: data.subCategoryId ? new Types.ObjectId(data.subCategoryId) : undefined,
       totalAmount: data.totalAmount,
       coordinates: data.coordinates,
       serviceStartDate: data.serviceStartDate,
       serviceEndDate: data.serviceEndDate,
       description: data.description,
+      quantity: data.quantity,
+      unitOfMeasure: data.unitOfMeasure,
       metadata: data.metadata,
       createdAt: now,
       requestExpiresAt,
       status: OrderStatus.PENDING,
       orderType: 'service',
-    });
+  });
 
-    return order.save();
-  }
+  return order.save();
+}
 
   async findAll(): Promise<Order[]> {
     return this.orderModel.find().exec();

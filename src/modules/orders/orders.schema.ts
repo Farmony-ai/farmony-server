@@ -63,6 +63,32 @@ export class Order {
   @Prop({ type: Number, required: true })
   totalAmount: number;
 
+  // ADDRESS-FIRST APPROACH
+  @Prop({ type: Types.ObjectId, ref: 'Address' })
+  serviceAddressId?: Types.ObjectId; // Primary address reference
+
+  @Prop({
+    type: {
+      addressLine1: String,
+      village: String,
+      district: String,
+      state: String,
+      pincode: String,
+      coordinates: [Number],
+      isTemporary: { type: Boolean, default: true }
+    }
+  })
+  embeddedAddress?: { // Fallback for one-time addresses
+    addressLine1: string;
+    village: string;
+    district: string;
+    state: string;
+    pincode: string;
+    coordinates: [number, number];
+    isTemporary: boolean;
+  };
+
+  // Backward compatibility - keep for existing data
   @Prop({ type: [Number] })
   coordinates?: number[];
 
@@ -89,3 +115,5 @@ export const OrderSchema = SchemaFactory.createForClass(Order);
 OrderSchema.index({ providerId: 1, status: 1 });
 OrderSchema.index({ seekerId: 1, status: 1 });
 OrderSchema.index({ requestExpiresAt: 1, status: 1 });
+OrderSchema.index({ serviceAddressId: 1 });
+OrderSchema.index({ 'embeddedAddress.coordinates': '2dsphere' });

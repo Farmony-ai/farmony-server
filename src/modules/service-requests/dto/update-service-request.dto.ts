@@ -7,10 +7,6 @@ export class UpdateServiceRequestDto extends PartialType(
   OmitType(CreateServiceRequestDto, ['categoryId', 'location'] as const),
 ) {
   @IsOptional()
-  @IsEnum(ServiceRequestStatus)
-  status?: ServiceRequestStatus;
-
-  @IsOptional()
   @IsString()
   cancellationReason?: string;
 }

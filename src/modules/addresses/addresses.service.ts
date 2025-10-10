@@ -11,7 +11,17 @@ export class AddressesService {
     @InjectModel(Address.name) private addressModel: Model<AddressDocument>,
   ) {}
 
-  async create(dto: CreateAddressDto): Promise<Address> {
+  async create(dto: any): Promise<Address> {
+    // Handle both new location field and legacy coordinates
+    const addressData = { ...dto };
+
+    if (dto.coordinates && !dto.location) {
+      addressData.location = {
+        type: 'Point',
+        coordinates: dto.coordinates
+      };
+    }
+
     // If this is set as default, unset other default addresses
     if (dto.isDefault) {
       await this.addressModel.updateMany(
@@ -19,8 +29,16 @@ export class AddressesService {
         { isDefault: false }
       );
     }
-    
-    const address = new this.addressModel(dto);
+
+    // Set as default if first address
+    if (!dto.hasOwnProperty('isDefault')) {
+      const existingCount = await this.addressModel.countDocuments({ userId: dto.userId });
+      if (existingCount === 0) {
+        addressData.isDefault = true;
+      }
+    }
+
+    const address = new this.addressModel(addressData);
     return address.save();
   }
 
@@ -58,13 +76,69 @@ export class AddressesService {
   async setDefault(id: string): Promise<Address> {
     const address = await this.addressModel.findById(id).exec();
     if (!address) throw new NotFoundException('Address not found');
-    
+
     await this.addressModel.updateMany(
       { userId: address.userId },
       { isDefault: false }
     );
-    
+
     address.isDefault = true;
     return address.save();
+  }
+
+  // New methods for address-first architecture
+  async updateUsage(id: string): Promise<void> {
+    await this.addressModel.updateOne(
+      { _id: id },
+      {
+        $inc: { usageCount: 1 },
+        $set: { lastUsedAt: new Date() }
+      }
+    );
+  }
+
+  async suggestAddresses(partial: string, userId: string): Promise<Address[]> {
+    // Simple text search on user's existing addresses
+    const userAddresses = await this.addressModel
+      .find({
+        userId,
+        isActive: true,
+        $or: [
+          { addressLine1: { $regex: partial, $options: 'i' } },
+          { village: { $regex: partial, $options: 'i' } },
+          { customLabel: { $regex: partial, $options: 'i' } }
+        ]
+      })
+      .sort({ usageCount: -1 })
+      .limit(5)
+      .exec();
+
+    return userAddresses;
+  }
+
+  async findNearbyAddresses(
+    coordinates: [number, number],
+    radiusKm: number,
+    filters?: { addressType?: string; serviceCategories?: string[] }
+  ): Promise<Address[]> {
+    const query: any = {
+      location: {
+        $near: {
+          $geometry: { type: 'Point', coordinates },
+          $maxDistance: radiusKm * 1000 // Convert to meters
+        }
+      },
+      isActive: true
+    };
+
+    if (filters?.addressType) {
+      query.addressType = filters.addressType;
+    }
+
+    if (filters?.serviceCategories) {
+      query.serviceCategories = { $in: filters.serviceCategories };
+    }
+
+    return this.addressModel.find(query).limit(50).exec();
   }
 }

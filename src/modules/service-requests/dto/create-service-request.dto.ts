@@ -5,7 +5,6 @@ import {
   IsOptional,
   IsArray,
   IsDate,
-  IsEnum,
   ValidateNested,
   IsMongoId,
   Min,
@@ -13,7 +12,6 @@ import {
   ArrayMaxSize,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ServiceRequestUrgency } from '../entities/service-request.entity';
 
 class LocationDto {
   @IsNumber({}, { message: 'Latitude must be a number' })
@@ -25,16 +23,6 @@ class LocationDto {
   @Min(-180, { message: 'Longitude must be between -180 and 180' })
   @Max(180, { message: 'Longitude must be between -180 and 180' })
   lon: number;
-}
-
-class BudgetDto {
-  @IsNumber()
-  @Min(0)
-  min: number;
-
-  @IsNumber()
-  @Min(0)
-  max: number;
 }
 
 class MetadataDto {
@@ -50,7 +38,7 @@ class MetadataDto {
   @IsOptional()
   @IsNumber()
   @Min(1)
-  duration?: number;
+  duration?: number; // in hours
 
   @IsOptional()
   @IsArray()
@@ -97,15 +85,6 @@ export class CreateServiceRequestDto {
 
   @IsOptional()
   @ValidateNested()
-  @Type(() => BudgetDto)
-  budget?: BudgetDto;
-
-  @IsOptional()
-  @IsEnum(ServiceRequestUrgency)
-  urgency?: ServiceRequestUrgency;
-
-  @IsOptional()
-  @ValidateNested()
   @Type(() => MetadataDto)
   metadata?: MetadataDto;
 
@@ -113,15 +92,5 @@ export class CreateServiceRequestDto {
   @IsArray()
   @IsString({ each: true })
   @ArrayMaxSize(5)
-  attachments?: string[];
-
-  @IsOptional()
-  @IsNumber()
-  @Min(1)
-  @Max(168)
-  expiresInHours?: number;
-
-  @IsOptional()
-  @IsString()
-  idempotencyKey?: string;
+  attachments?: string[]; // S3 keys for uploaded files
 }

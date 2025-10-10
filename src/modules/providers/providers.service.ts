@@ -1,8 +1,10 @@
-import { Injectable } from '@nestjs/common';
+// src/modules/providers/providers.service.ts
+import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { OrdersService } from '../orders/orders.service';
 import { ListingsService } from '../listings/listings.service';
 import { RatingsService } from '../ratings/ratings.service';
 import { UsersService } from '../users/users.service';
+import { ServiceRequestsService } from '../service-requests/service-requests.service';
 import { OrderStatus } from '../orders/dto/create-order.dto';
 import { UpdatePreferencesDto } from '../users/dto/update-preferences.dto';
 
@@ -13,6 +15,8 @@ export class ProvidersService {
     private readonly listingsService: ListingsService,
     private readonly ratingsService: RatingsService,
     private readonly usersService: UsersService,
+    @Inject(forwardRef(() => ServiceRequestsService))
+    private readonly serviceRequestsService: ServiceRequestsService,
   ) {}
 
   // Helper function to calculate distance between coordinates
@@ -31,7 +35,8 @@ export class ProvidersService {
     try {
       // Get provider details for location
       const provider = await this.usersService.findById(providerId);
-      const providerCoordinates = (provider as any)?.coordinates || (provider as any)?.address?.coordinates || null;
+      const providerCoordinates = (provider as any)?.coordinates || 
+                                  (provider as any)?.address?.coordinates || null;
       
       // Get summary statistics
       const summary = await this.ordersService.getProviderSummary(providerId);
@@ -46,14 +51,21 @@ export class ProvidersService {
         ? ratings.reduce((sum, r) => sum + r.score, 0) / ratings.length 
         : 0;
 
-      // Get all bookings without population
+      // Get all bookings/orders
       const allBookings = await this.ordersService.findByProvider(providerId);
+      
+      // Get available service requests for provider
+      const availableRequests = await this.getAvailableServiceRequests(providerId);
+      
+      // Get accepted service requests (orders from service requests)
+      const acceptedRequests = await this.getAcceptedServiceRequests(providerId);
       
       // Manually fetch and enhance booking data
       const enhancedBookings = await Promise.all(
         allBookings.map(async (booking) => {
           let seekerDetails = null;
           let listingDetails = null;
+          let serviceRequestDetails = null;
           
           try {
             // Fetch seeker details
@@ -62,17 +74,31 @@ export class ProvidersService {
             console.error(`Failed to fetch seeker ${booking.seekerId}:`, error);
           }
           
-          try {
-            // Use the listings service findById which already handles transformation
-            listingDetails = await this.listingsService.findById(booking.listingId.toString());
-          } catch (error) {
-            console.error(`Failed to fetch listing ${booking.listingId}:`, error);
+          // Check if this is from a service request or direct booking
+          if ((booking as any).serviceRequestId) {
+            try {
+              serviceRequestDetails = await this.serviceRequestsService.findById(
+                (booking as any).serviceRequestId
+              );
+            } catch (error) {
+              console.error(`Failed to fetch service request:`, error);
+            }
+          }
+          
+          if (booking.listingId) {
+            try {
+              listingDetails = await this.listingsService.findById(booking.listingId.toString());
+            } catch (error) {
+              console.error(`Failed to fetch listing ${booking.listingId}:`, error);
+            }
           }
           
           const enhanced = {
             ...(booking as any).toObject ? (booking as any).toObject() : booking,
             seekerDetails,
-            listingDetails
+            listingDetails,
+            serviceRequestDetails,
+            isServiceRequest: !!(booking as any).serviceRequestId,
           };
           return enhanced;
         })
@@ -80,14 +106,6 @@ export class ProvidersService {
 
       // Process and enhance bookings with distance calculation
       const enhanceBooking = (booking: any) => {
-        // Debug logging
-        console.log('Processing booking:', {
-          id: booking._id,
-          hasListingDetails: !!booking.listingDetails,
-          listingPhotos: booking.listingDetails?.photos?.length || 0,
-          listingPhotoUrls: booking.listingDetails?.photoUrls?.length || 0
-        });
-
         const enhanced = {
           _id: booking._id,
           status: booking.status,
@@ -101,6 +119,7 @@ export class ProvidersService {
           totalAmount: booking.totalAmount,
           isAutoRejected: booking.isAutoRejected,
           coordinates: booking.coordinates,
+          isServiceRequest: booking.isServiceRequest,
           
           // Seeker details
           seeker: {
@@ -117,17 +136,24 @@ export class ProvidersService {
           },
           
           // Listing details with correct field names
-          listing: {
+          listing: booking.listingDetails ? {
             _id: booking.listingDetails?._id || booking.listingId,
             title: booking.listingDetails?.title || 'Service',
             description: booking.listingDetails?.description || '',
             price: booking.listingDetails?.price || booking.totalAmount,
             unitOfMeasure: booking.listingDetails?.unitOfMeasure || booking.unitOfMeasure,
             category: booking.listingDetails?.category || '',
-            // Use photoUrls which is what the listing service provides
             images: booking.listingDetails?.photoUrls || [],
             thumbnailUrl: booking.listingDetails?.photoUrls?.[0] || null
-          },
+          } : null,
+          
+          // Service request details if applicable
+          serviceRequest: booking.serviceRequestDetails ? {
+            title: booking.serviceRequestDetails.title,
+            description: booking.serviceRequestDetails.description,
+            address: booking.serviceRequestDetails.address,
+            metadata: booking.serviceRequestDetails.metadata,
+          } : null,
           
           // Distance calculation
           distance: null as number | null
@@ -174,11 +200,14 @@ export class ProvidersService {
           revenue: summary.revenue,
           activeListings,
           averageRating: Number(avgRating.toFixed(1)),
-          totalRatings: ratings.length
+          totalRatings: ratings.length,
+          availableServiceRequests: availableRequests.length,
         },
         pendingBookings,
         upcomingBookings,
-        recentBookings: [...pendingBookings, ...upcomingBookings].slice(0, 5)
+        recentBookings: [...pendingBookings, ...upcomingBookings].slice(0, 5),
+        availableServiceRequests: availableRequests.slice(0, 5), // Top 5 available requests
+        activeServiceRequests: acceptedRequests.slice(0, 5), // Top 5 accepted requests
       };
     } catch (error) {
       console.error('Error in getProviderDashboard:', error);
@@ -189,13 +218,19 @@ export class ProvidersService {
   async getProviderBookings(providerId: string) {
     const bookings = await this.ordersService.findByProvider(providerId);
     
+    // Separate service request orders from direct bookings
+    const serviceRequestOrders = bookings.filter(b => (b as any).serviceRequestId);
+    const directBookings = bookings.filter(b => !(b as any).serviceRequestId);
+    
     return {
       active: bookings.filter(b => 
         ['pending', 'accepted', 'paid'].includes(b.status)
       ),
       completed: bookings.filter(b => b.status === 'completed'),
       canceled: bookings.filter(b => b.status === 'canceled'),
-      toReview: await this.getBookingsNeedingReview(providerId, bookings)
+      toReview: await this.getBookingsNeedingReview(providerId, bookings),
+      serviceRequestOrders: serviceRequestOrders.length,
+      directBookings: directBookings.length,
     };
   }
 
@@ -237,5 +272,140 @@ export class ProvidersService {
 
   async updateUserPreferences(userId: string, dto: UpdatePreferencesDto) {
     return this.usersService.updatePreferences(userId, dto);
+  }
+
+  // New methods for service requests
+  async getAvailableServiceRequests(providerId: string): Promise<any[]> {
+    try {
+      // Get provider's active listings to determine categories and subcategories
+      const listings = await this.listingsService.findByProvider(providerId);
+      const activeListings = listings.filter(l => l.isActive);
+      
+      if (activeListings.length === 0) {
+        return [];
+      }
+
+      // Build a map of category -> subcategories the provider services
+      const serviceMap = new Map<string, Set<string>>();
+      
+      for (const listing of activeListings) {
+        const categoryId = listing.categoryId?._id?.toString() || listing.categoryId?.toString();
+        const subCategoryId = listing.subCategoryId?._id?.toString() || listing.subCategoryId?.toString();
+        
+        if (categoryId) {
+          if (!serviceMap.has(categoryId)) {
+            serviceMap.set(categoryId, new Set());
+          }
+          if (subCategoryId) {
+            serviceMap.get(categoryId).add(subCategoryId);
+          }
+        }
+      }
+
+      // Get all matched service requests
+      const result = await this.serviceRequestsService.findAll({
+        status: 'MATCHED' as any,
+        page: 1,
+        limit: 100,
+      });
+
+      // Filter requests where:
+      // 1. Provider was notified
+      // 2. Category AND subcategory match provider's listings
+      const relevantRequests = result.requests.filter((request: any) => {
+        // Check if provider was notified
+        const wasNotified = request.allNotifiedProviders?.some(
+          (pid: any) => pid.toString() === providerId
+        );
+        
+        if (!wasNotified) return false;
+        
+        // Check if category matches
+        const requestCategoryId = request.categoryId?._id?.toString() || request.categoryId?.toString();
+        if (!serviceMap.has(requestCategoryId)) return false;
+        
+        // Check if subcategory matches (if specified in request)
+        if (request.subCategoryId) {
+          const requestSubCategoryId = request.subCategoryId?._id?.toString() || request.subCategoryId?.toString();
+          const providerSubCategories = serviceMap.get(requestCategoryId);
+          
+          // Provider must service this specific subcategory
+          if (!providerSubCategories.has(requestSubCategoryId)) {
+            return false;
+          }
+        }
+        
+        return true;
+      });
+
+      // Sort by urgency (serviceStartDate) and creation date
+      return relevantRequests.sort((a, b) => {
+        const dateA = new Date(a.serviceStartDate).getTime();
+        const dateB = new Date(b.serviceStartDate).getTime();
+        return dateA - dateB;
+      });
+    } catch (error) {
+      console.error('Error getting available service requests:', error);
+      return [];
+    }
+  }
+
+  async getAcceptedServiceRequests(providerId: string): Promise<any[]> {
+    try {
+      // Get orders that originated from service requests
+      const orders = await this.ordersService.findByProvider(providerId);
+      const serviceRequestOrders = orders.filter(o => (o as any).serviceRequestId);
+      
+      // Enhance with service request details
+      const enhanced = await Promise.all(
+        serviceRequestOrders.map(async (order) => {
+          try {
+            const requestDetails = await this.serviceRequestsService.findById(
+              (order as any).serviceRequestId
+            );
+            return {
+              ...order,
+              serviceRequest: requestDetails,
+            };
+          } catch (error) {
+            return order;
+          }
+        })
+      );
+      
+      return enhanced;
+    } catch (error) {
+      console.error('Error getting accepted service requests:', error);
+      return [];
+    }
+  }
+
+  async getServiceRequestStats(providerId: string): Promise<{
+    totalNotified: number;
+    totalAccepted: number;
+    totalDeclined: number;
+    acceptanceRate: number;
+  }> {
+    try {
+      // This would require tracking in the service request module
+      // For now, return basic stats based on orders
+      const orders = await this.ordersService.findByProvider(providerId);
+      const serviceRequestOrders = orders.filter(o => (o as any).serviceRequestId);
+      
+      return {
+        totalNotified: 0, // Would need to query service requests
+        totalAccepted: serviceRequestOrders.length,
+        totalDeclined: 0, // Would need to track declines
+        acceptanceRate: 0, // Calculate when we have the data
+      };
+    } catch (error) {
+      console.error('Error getting service request stats:', error);
+      return {
+        totalNotified: 0,
+        totalAccepted: 0,
+        totalDeclined: 0,
+        acceptanceRate: 0,
+      };
+    }
   }
 }
