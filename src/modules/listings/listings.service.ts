@@ -47,87 +47,70 @@ export class ListingsService {
 
   // Upload files and get S3 keys
   const photoKeys = files && files.length > 0 
-    ? await Promise.all(
-        files.map(file => this.s3Service.uploadFile(file, 'listings'))
-      )
+    ? await Promise.all(files.map(file => this.s3Service.uploadFile(file, 'listings')))
     : [];
-  
-  console.log('Photo keys:', photoKeys);
 
-  // Handle location data
-  let locationData;
-  
-  // Check if coordinates are provided and valid (must have exactly 2 values)
-  const hasValidCoordinates = (coords: any): boolean => {
-    return Array.isArray(coords) && 
-           coords.length === 2 && 
-           typeof coords[0] === 'number' && 
-           typeof coords[1] === 'number' &&
-           !isNaN(coords[0]) && 
-           !isNaN(coords[1]);
-  };
+  // IMPROVED: Handle address and location
+  let serviceAddressId: string;
+  let locationData: any;
 
-  // Check dto.location.coordinates first
-  if (dto.location && hasValidCoordinates(dto.location.coordinates)) {
+  // Option 1: Address ID provided
+  if (dto.addressId) {
+    const address = await this.addressesService.getValidatedAddress(dto.addressId);
+    serviceAddressId = address._id.toString();
     locationData = {
       type: 'Point',
-      coordinates: dto.location.coordinates
+      coordinates: address.coordinates
     };
-  } 
-  // Check dto.coordinates
-  else if (hasValidCoordinates((dto as any).coordinates)) {
-    locationData = {
-      type: 'Point',
-      coordinates: (dto as any).coordinates
-    };
-  } 
-  // No valid coordinates provided, fetch from user's default address
-  else {
-    console.log('No valid coordinates provided, fetching user default address...');
-    
-    const user = await this.usersService.getUserWithAddress(dto.providerId);
-    
-    if (user.defaultAddressId && hasValidCoordinates(user.defaultAddressId.coordinates)) {
-      console.log('Using user default address coordinates:', user.defaultAddressId.coordinates);
-      locationData = {
-        type: 'Point',
-        coordinates: user.defaultAddressId.coordinates
-      };
-    } else {
-      // Try to get first address from user's addresses
-      const userAddresses = await this.addressesService.findAllByUser(dto.providerId);
-      
-      const validAddress = userAddresses.find(addr => hasValidCoordinates(addr.coordinates));
-      
-      if (validAddress) {
-        console.log('Using user address coordinates:', validAddress.coordinates);
-        locationData = {
-          type: 'Point',
-          coordinates: validAddress.coordinates
-        };
-      } else {
-        throw new BadRequestException(
-          'No valid address found for user. Please add an address with valid coordinates to your profile first.'
-        );
-      }
-    }
   }
-
-  // Validate final location data before saving
-  if (!locationData || !hasValidCoordinates(locationData.coordinates)) {
-    throw new BadRequestException('Unable to determine valid location coordinates for the listing');
+  // Option 2: Coordinates provided - create address
+  else if (dto.location?.coordinates && this.hasValidCoordinates(dto.location.coordinates)) {
+    const address = await this.addressesService.findOrCreateByCoordinates(
+      dto.providerId,
+      dto.location.coordinates,
+      {
+        tag: 'listing',
+        addressLine1: dto.addressLine1 || 'Listing Location',
+        village: dto.village || '',
+        district: dto.district || '',
+        state: dto.state || '',
+        pincode: dto.pincode || '',
+      }
+    );
+    serviceAddressId = address._id.toString();
+    locationData = {
+      type: 'Point',
+      coordinates: address.coordinates
+    };
+  }
+  // Option 3: Use provider's default address
+  else {
+    const address = await this.addressesService.getDefaultServiceAddress(dto.providerId);
+    serviceAddressId = address._id.toString();
+    locationData = {
+      type: 'Point',
+      coordinates: address.coordinates
+    };
+    
+    console.log(`Using provider's default address: ${address._id}`);
   }
 
   const listing = new this.listingModel({
     ...dto,
     photos: photoKeys,
-    location: locationData
+    location: locationData,
+    serviceAddressId: new Types.ObjectId(serviceAddressId) // Link to address
   });
   
   const saved = await listing.save();
   
-  // Return with public URLs (no async needed!)
-  return this.transformWithPublicUrls(saved);
+  // Return with populated address
+  const populated = await this.listingModel
+    .findById(saved._id)
+    .populate('serviceAddressId')
+    .exec();
+    
+  return this.transformWithPublicUrls(populated);
 }
 
   async findAll(filters?: SearchFilters): Promise<any[]> {

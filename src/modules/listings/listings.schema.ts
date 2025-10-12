@@ -75,6 +75,9 @@ export class Listing {
 
   @Prop({ type: Boolean, default: false })
   isVerified: boolean; // Admin verified listing
+
+  @Prop({ type: Types.ObjectId, ref: 'Address' })
+  serviceAddressId?: Types.ObjectId;
 }
 
 export const ListingSchema = SchemaFactory.createForClass(Listing);

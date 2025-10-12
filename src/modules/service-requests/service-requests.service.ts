@@ -46,46 +46,81 @@ export class ServiceRequestsService {
   ) {}
 
   async create(
-    createDto: CreateServiceRequestDto,
-    seekerId: string,
-  ): Promise<ServiceRequest> {
-    const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + WAVE_CONFIG.expiryHours);
+  createDto: CreateServiceRequestDto,
+  seekerId: string,
+): Promise<ServiceRequest> {
+  const expiresAt = new Date();
+  expiresAt.setHours(expiresAt.getHours() + WAVE_CONFIG.expiryHours);
 
-    const requestId = uuidv4();
+  const requestId = uuidv4();
 
-    const serviceRequest = new this.serviceRequestModel({
-      _id: requestId,
-      seekerId: new Types.ObjectId(seekerId),
-      categoryId: new Types.ObjectId(createDto.categoryId),
-      subCategoryId: createDto.subCategoryId
-        ? new Types.ObjectId(createDto.subCategoryId)
-        : undefined,
-      title: createDto.title,
-      description: createDto.description,
-      location: {
-        type: 'Point',
-        coordinates: [createDto.location.lon, createDto.location.lat],
-      },
-      address: createDto.address,
-      serviceStartDate: createDto.serviceStartDate,
-      serviceEndDate: createDto.serviceEndDate,
-      status: ServiceRequestStatus.OPEN,
-      expiresAt,
-      metadata: createDto.metadata,
-      attachments: createDto.attachments || [],
-      currentWave: 0,
-      notificationWaves: [],
-      allNotifiedProviders: [],
-    });
+  // Handle address resolution
+  let serviceAddressId: string;
+  let coordinates: number[];
 
-    const savedRequest = await serviceRequest.save();
-
-    // Start the first wave of notifications
-    await this.processNextWave(savedRequest._id);
-
-    return savedRequest;
+  // Option 1: Address ID provided
+  if (createDto.addressId) {
+    const address = await this.addressesService.getValidatedAddress(createDto.addressId);
+    serviceAddressId = address._id.toString();
+    coordinates = address.coordinates;
   }
+  // Option 2: Coordinates provided - create/find address
+  else if (createDto.location) {
+    const address = await this.addressesService.findOrCreateByCoordinates(
+      seekerId,
+      [createDto.location.lon, createDto.location.lat],
+      {
+        tag: 'service_request',
+        addressLine1: createDto.addressLine1 || 'Service Location',
+        village: createDto.village || 'Not Specified',
+        district: createDto.district || 'Not Specified',
+        state: createDto.state || 'Not Specified',
+        pincode: createDto.pincode || '000000',
+      }
+    );
+    serviceAddressId = address._id.toString();
+    coordinates = address.coordinates;
+  }
+  // Option 3: Use seeker's default address
+  else {
+    const address = await this.addressesService.getDefaultServiceAddress(seekerId);
+    serviceAddressId = address._id.toString();
+    coordinates = address.coordinates;
+  }
+
+  const serviceRequest = new this.serviceRequestModel({
+    _id: requestId,
+    seekerId: new Types.ObjectId(seekerId),
+    categoryId: new Types.ObjectId(createDto.categoryId),
+    subCategoryId: createDto.subCategoryId
+      ? new Types.ObjectId(createDto.subCategoryId)
+      : undefined,
+    title: createDto.title,
+    description: createDto.description,
+    location: {
+      type: 'Point',
+      coordinates: coordinates,
+    },
+    serviceAddressId: new Types.ObjectId(serviceAddressId), // Link to address
+    serviceStartDate: createDto.serviceStartDate,
+    serviceEndDate: createDto.serviceEndDate,
+    status: ServiceRequestStatus.OPEN,
+    expiresAt,
+    metadata: createDto.metadata,
+    attachments: createDto.attachments || [],
+    currentWave: 0,
+    notificationWaves: [],
+    allNotifiedProviders: [],
+  });
+
+  const savedRequest = await serviceRequest.save();
+
+  // Start the first wave of notifications
+  await this.processNextWave(savedRequest._id);
+
+  return savedRequest;
+}
+
 
   async processNextWave(requestId: string): Promise<void> {
     const request = await this.serviceRequestModel.findById(requestId);

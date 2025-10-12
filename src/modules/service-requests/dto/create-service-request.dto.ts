@@ -64,14 +64,36 @@ export class CreateServiceRequestDto {
   @IsNotEmpty()
   description: string;
 
+  // OPTION 1: Provide existing address ID
+  @IsOptional()
+  @IsMongoId()
+  addressId?: string;
+
+  // OPTION 2: Provide coordinates and address details
+  @IsOptional()
   @ValidateNested()
   @Type(() => LocationDto)
-  @IsNotEmpty()
-  location: LocationDto;
+  location?: LocationDto;
 
   @IsOptional()
   @IsString()
-  address?: string;
+  addressLine1?: string;
+
+  @IsOptional()
+  @IsString()
+  village?: string;
+
+  @IsOptional()
+  @IsString()
+  district?: string;
+
+  @IsOptional()
+  @IsString()
+  state?: string;
+
+  @IsOptional()
+  @IsString()
+  pincode?: string;
 
   @IsDate()
   @Type(() => Date)
@@ -83,6 +105,7 @@ export class CreateServiceRequestDto {
   @IsNotEmpty()
   serviceEndDate: Date;
 
+  
   @IsOptional()
   @ValidateNested()
   @Type(() => MetadataDto)

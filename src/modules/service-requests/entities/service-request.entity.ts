@@ -154,6 +154,9 @@ export class ServiceRequest {
 
   @Prop({ type: Date })
   completedAt?: Date;
+
+  @Prop({ type: Types.ObjectId, ref: 'Address' })
+  serviceAddressId?: Types.ObjectId;
 }
 
 const ServiceRequestSchema = SchemaFactory.createForClass(ServiceRequest);
