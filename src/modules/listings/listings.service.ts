@@ -9,6 +9,7 @@ import { S3Service } from '../aws/s3.service';
 import { UsersService } from '../users/users.service';
 import { AddressesService } from '../addresses/addresses.service';
 import { Catalogue, CatalogueDocument } from '../catalogue/catalogue.schema';
+import { AddressType } from '../../common/interfaces/address.interface';
 
 export interface SearchFilters {
   categoryId?: string;
@@ -66,9 +67,10 @@ export class ListingsService {
   }
   // Option 2: Coordinates provided - create address
   else if (dto.location?.coordinates && this.hasValidCoordinates(dto.location.coordinates)) {
+    const coordinates = dto.location.coordinates as [number, number];
     const address = await this.addressesService.findOrCreateByCoordinates(
       dto.providerId,
-      dto.location.coordinates,
+      coordinates,
       {
         tag: 'other' as any, // Using 'other' instead of 'listing'
         addressLine1: dto.addressLine1 || 'Listing Location',
@@ -503,6 +505,18 @@ export class ListingsService {
     if (!updated) throw new NotFoundException('Listing not found');
     
     return this.transformWithPublicUrls(updated);
+  }
+
+  private getAddressCoordinates(address: any): [number, number] {
+    if (address?.location?.coordinates && address.location.coordinates.length === 2) {
+      return address.location.coordinates as [number, number];
+    }
+
+    if (Array.isArray(address?.coordinates) && address.coordinates.length === 2) {
+      return address.coordinates as [number, number];
+    }
+
+    throw new BadRequestException('Address is missing valid coordinates');
   }
 
   // Helper method to parse search filters

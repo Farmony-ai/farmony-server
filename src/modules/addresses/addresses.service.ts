@@ -4,6 +4,7 @@ import { Model, Types } from 'mongoose';
 import { Address, AddressDocument } from './addresses.schema';
 import { CreateAddressDto } from './dto/create-address.dto';
 import { UpdateAddressDto } from './dto/update-address.dto';
+import { AddressType } from '../../common/interfaces/address.interface';
 
 @Injectable()
 export class AddressesService {
@@ -11,27 +12,37 @@ export class AddressesService {
     @InjectModel(Address.name) private addressModel: Model<AddressDocument>,
   ) {}
 
-  async create(dto: any): Promise<Address> {
-    // Handle both new location field and legacy coordinates
-    const addressData = { ...dto };
-
-    if (dto.coordinates && !dto.location) {
-      addressData.location = {
-        type: 'Point',
-        coordinates: dto.coordinates
-      };
+  async create(dto: Partial<CreateAddressDto> & { userId: string }): Promise<AddressDocument> {
+    const addressType = this.resolveAddressType(dto);
+    if (!addressType) {
+      throw new BadRequestException('addressType is required');
     }
 
-    // If this is set as default, unset other default addresses
+    const coordinates = this.extractCoordinatesFromPayload(dto);
+    if (!coordinates) {
+      throw new BadRequestException('Invalid coordinates format. Expected [longitude, latitude]');
+    }
+
+    const addressData: any = {
+      ...dto,
+      addressType,
+      location: {
+        type: 'Point',
+        coordinates,
+      },
+      coordinates,
+    };
+
+    delete addressData.tag;
+
     if (dto.isDefault) {
       await this.addressModel.updateMany(
         { userId: dto.userId },
-        { isDefault: false }
+        { isDefault: false },
       );
     }
 
-    // Set as default if first address
-    if (!dto.hasOwnProperty('isDefault')) {
+    if (!Object.prototype.hasOwnProperty.call(dto, 'isDefault')) {
       const existingCount = await this.addressModel.countDocuments({ userId: dto.userId });
       if (existingCount === 0) {
         addressData.isDefault = true;
@@ -42,38 +53,62 @@ export class AddressesService {
     return address.save();
   }
 
-  async findAllByUser(userId: string): Promise<Address[]> {
+  async findAllByUser(userId: string): Promise<AddressDocument[]> {
     return this.addressModel.find({ userId }).exec();
   }
 
-  async findById(id: string): Promise<Address> {
+  async findById(id: string): Promise<AddressDocument> {
     const address = await this.addressModel.findById(id).exec();
     if (!address) throw new NotFoundException('Address not found');
     return address;
   }
 
-  async update(id: string, dto: UpdateAddressDto): Promise<Address> {
-    // If updating to default, unset other defaults
+  async update(id: string, dto: UpdateAddressDto): Promise<AddressDocument> {
+    const updateData: any = { ...dto };
+
     if (dto.isDefault) {
-      const address = await this.findById(id);
+      const current = await this.findById(id);
       await this.addressModel.updateMany(
-        { userId: address.userId, _id: { $ne: id } },
-        { isDefault: false }
+        { userId: current.userId, _id: { $ne: id } },
+        { isDefault: false },
       );
     }
-    
-    const updated = await this.addressModel.findByIdAndUpdate(id, dto, { new: true }).exec();
-    if (!updated) throw new NotFoundException('Address not found');
+
+    const addressType = this.resolveAddressType(updateData, { optional: true });
+    if (addressType) {
+      updateData.addressType = addressType;
+    }
+
+    const coordinates = this.extractCoordinatesFromPayload(updateData, { required: false });
+    if (coordinates) {
+      updateData.location = {
+        type: 'Point',
+        coordinates,
+      };
+      updateData.coordinates = coordinates;
+    } else {
+      delete updateData.location;
+      delete updateData.coordinates;
+    }
+
+    delete updateData.tag;
+
+    const updated = await this.addressModel.findByIdAndUpdate(id, updateData, { new: true }).exec();
+    if (!updated) {
+      throw new NotFoundException('Address not found');
+    }
+
+    await this.ensureGeoConsistency(updated);
     return updated;
   }
 
-  async delete(id: string): Promise<Address> {
+  async delete(id: string): Promise<AddressDocument> {
     const removed = await this.addressModel.findByIdAndDelete(id).exec();
     if (!removed) throw new NotFoundException('Address not found');
     return removed;
   }
 
-  async setDefault(id: string): Promise<Address> {
+  async setDefault(id: string): Promise<AddressDocument> {
     const address = await this.addressModel.findById(id).exec();
     if (!address) throw new NotFoundException('Address not found');
 
@@ -97,7 +132,7 @@ export class AddressesService {
     );
   }
 
-  async suggestAddresses(partial: string, userId: string): Promise<Address[]> {
+  async suggestAddresses(partial: string, userId: string): Promise<AddressDocument[]> {
     // Simple text search on user's existing addresses
     const userAddresses = await this.addressModel
       .find({
@@ -119,8 +154,8 @@ export class AddressesService {
   async findNearbyAddresses(
     coordinates: [number, number],
     radiusKm: number,
-    filters?: { addressType?: string; serviceCategories?: string[] }
-  ): Promise<Address[]> {
+    filters?: { addressType?: AddressType; serviceCategories?: string[] }
+  ): Promise<AddressDocument[]> {
     const query: any = {
       location: {
         $near: {
@@ -144,54 +179,67 @@ export class AddressesService {
 
   async createFromCoordinates(
     userId: string,
-    coordinates: number[],
+    coordinates: [number, number],
     additionalData?: Partial<CreateAddressDto>
-  ): Promise<Address> {
-    // Validate coordinates format [longitude, latitude]
+  ): Promise<AddressDocument> {
     if (!this.validateCoordinates(coordinates)) {
       throw new BadRequestException('Invalid coordinates format. Expected [longitude, latitude]');
     }
 
-    const address = new this.addressModel({
-      userId: new Types.ObjectId(userId),
-      tag: additionalData?.tag || 'service',
+    const payload: Partial<CreateAddressDto> & { userId: string } = {
+      userId,
+      addressType:
+        additionalData?.addressType ||
+        (additionalData && (additionalData as any).tag) ||
+        AddressType.SERVICE_AREA,
       addressLine1: additionalData?.addressLine1 || 'Service Location',
       village: additionalData?.village || 'Not Specified',
       district: additionalData?.district || 'Not Specified',
       state: additionalData?.state || 'Not Specified',
       pincode: additionalData?.pincode || '000000',
       coordinates,
-      isDefault: false,
-      ...additionalData
-    });
+      customLabel: additionalData?.customLabel,
+      tehsil: additionalData?.tehsil,
+      accuracy: additionalData?.accuracy,
+      serviceCategories: additionalData?.serviceCategories,
+      accessInstructions: additionalData?.accessInstructions,
+      isDefault: additionalData?.isDefault ?? false,
+      isActive: additionalData?.isActive ?? true,
+    };
 
-    return address.save();
+    return this.create(payload);
   }
 
   // NEW: Find or create address at coordinates
   async findOrCreateByCoordinates(
     userId: string,
-    coordinates: number[],
+    coordinates: [number, number],
     additionalData?: Partial<CreateAddressDto>
-  ): Promise<Address> {
-    // Check if address exists at these exact coordinates for this user
+  ): Promise<AddressDocument> {
+    if (!this.validateCoordinates(coordinates)) {
+      throw new BadRequestException('Invalid coordinates format. Expected [longitude, latitude]');
+    }
+
     const existing = await this.addressModel.findOne({
       userId: new Types.ObjectId(userId),
-      coordinates: {
+      location: {
         $near: {
           $geometry: { type: 'Point', coordinates },
-          $maxDistance: 10 // Within 10 meters
-        }
-      }
+          $maxDistance: 10,
+        },
+      },
     });
 
-    if (existing) return existing;
+    if (existing) {
+      await this.ensureGeoConsistency(existing);
+      return existing;
+    }
 
     return this.createFromCoordinates(userId, coordinates, additionalData);
   }
 
   // NEW: Get user's default service address
-  async getDefaultServiceAddress(userId: string): Promise<Address> {
+  async getDefaultServiceAddress(userId: string): Promise<AddressDocument> {
     // First try to get default address
     let address = await this.addressModel.findOne({
       userId: new Types.ObjectId(userId),
@@ -209,21 +257,24 @@ export class AddressesService {
       throw new NotFoundException('No address found for user. Please add an address first.');
     }
 
+    await this.ensureGeoConsistency(address);
     return address;
   }
 
   // NEW: Get address with coordinates validation
-  async getValidatedAddress(addressId: string): Promise<Address> {
-    const address = await this.addressModel.findById(addressId).exec() as Address | null;
-    
+  async getValidatedAddress(addressId: string): Promise<AddressDocument> {
+    const address = await this.addressModel.findById(addressId).exec();
+
     if (!address) {
       throw new NotFoundException('Address not found');
     }
 
-    if (!this.validateCoordinates(address.coordinates)) {
+    const coordinates = this.extractCoordinatesFromAddress(address);
+    if (!coordinates) {
       throw new BadRequestException('Address has invalid coordinates');
     }
 
+    await this.ensureGeoConsistency(address);
     return address;
   }
 
@@ -239,12 +290,12 @@ export class AddressesService {
 
   // NEW: Find addresses within radius
   async findAddressesInRadius(
-    centerCoordinates: number[],
+    centerCoordinates: [number, number],
     radiusKm: number,
-    filters?: { userId?: string; tag?: string }
-  ): Promise<Address[]> {
+    filters?: { userId?: string; addressType?: AddressType; tag?: AddressType }
+  ): Promise<AddressDocument[]> {
     const query: any = {
-      coordinates: {
+      location: {
         $near: {
           $geometry: {
             type: 'Point',
@@ -259,11 +310,90 @@ export class AddressesService {
       query.userId = new Types.ObjectId(filters.userId);
     }
 
-    if (filters?.tag) {
-      query.tag = filters.tag;
+    const addressType = filters?.addressType || filters?.tag;
+    if (addressType) {
+      query.addressType = addressType;
     }
 
     return this.addressModel.find(query).exec();
   }
 
+  private resolveAddressType(
+    dto: Partial<CreateAddressDto> & { addressType?: AddressType; tag?: AddressType },
+    options: { optional?: boolean } = {},
+  ): AddressType | null {
+    const addressType = dto.addressType || dto.tag || null;
+
+    if (!addressType) {
+      if (options.optional) {
+        return null;
+      }
+      throw new BadRequestException('addressType is required');
+    }
+
+    return addressType;
+  }
+
+  private extractCoordinatesFromPayload(
+    dto: Partial<CreateAddressDto> & { coordinates?: any; location?: { coordinates?: any } },
+    options: { required?: boolean } = { required: true },
+  ): [number, number] | null {
+    if (dto.location?.coordinates && this.validateCoordinates(dto.location.coordinates)) {
+      return dto.location.coordinates as [number, number];
+    }
+
+    if (dto.coordinates && this.validateCoordinates(dto.coordinates)) {
+      return dto.coordinates as [number, number];
+    }
+
+    if (options.required) {
+      throw new BadRequestException('Invalid coordinates format. Expected [longitude, latitude]');
+    }
+
+    return null;
+  }
+
+  private extractCoordinatesFromAddress(address: Address | AddressDocument): [number, number] | null {
+    if (address.location?.coordinates && this.validateCoordinates(address.location.coordinates)) {
+      return address.location.coordinates as [number, number];
+    }
+
+    if (this.validateCoordinates(address.coordinates)) {
+      return address.coordinates as [number, number];
+    }
+
+    return null;
+  }
+
+  private async ensureGeoConsistency(address: AddressDocument): Promise<AddressDocument> {
+    const coordinates = this.extractCoordinatesFromAddress(address);
+    if (!coordinates) {
+      throw new BadRequestException('Address has invalid coordinates');
+    }
+
+    let changed = false;
+
+    const hasValidLocation =
+      address.location?.coordinates && this.validateCoordinates(address.location.coordinates);
+    if (!hasValidLocation) {
+      address.location = {
+        type: 'Point',
+        coordinates,
+      } as any;
+      changed = true;
+    }
+
+    const hasValidLegacyCoordinates =
+      address.coordinates && this.validateCoordinates(address.coordinates);
+    if (!hasValidLegacyCoordinates) {
+      address.coordinates = coordinates;
+      changed = true;
+    }
+
+    if (changed) {
+      await address.save();
+    }
+
+    return address;
+  }
 }

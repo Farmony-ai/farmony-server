@@ -1,19 +1,42 @@
-import { IsString, IsNotEmpty, IsEnum, IsArray, ArrayMinSize, IsNumber, IsBoolean, IsOptional, IsMongoId } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsEnum,
+  IsArray,
+  ArrayMinSize,
+  IsNumber,
+  IsBoolean,
+  IsOptional,
+  IsMongoId,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-
-export enum AddressTag {
-  HOME = 'home',
-  WORK = 'work',
-  PERSONAL = 'personal',
-  OTHER = 'other'
-}
+import { Transform } from 'class-transformer';
+import { AddressType } from '../../../common/interfaces/address.interface';
 
 export class CreateAddressDto {
   @IsMongoId()
   userId: string;
 
-  @IsEnum(AddressTag)
-  tag: AddressTag;
+  @ApiProperty({
+    enum: AddressType,
+    description: 'Classification for the address (legacy alias "tag" also accepted)',
+  })
+  @IsEnum(AddressType)
+  @Transform(({ value, obj }) => value ?? obj.tag)
+  addressType: AddressType;
+
+  @ApiPropertyOptional({
+    enum: AddressType,
+    description: 'Legacy alias mapping to addressType',
+  })
+  @IsOptional()
+  @IsEnum(AddressType)
+  tag?: AddressType;
+
+  @ApiPropertyOptional({ description: 'User-facing label such as "North Field"' })
+  @IsString()
+  @IsOptional()
+  customLabel?: string;
 
   @IsString()
   @IsNotEmpty()
@@ -29,7 +52,7 @@ export class CreateAddressDto {
 
   @IsString()
   @IsOptional()
-  tehsil: string;
+  tehsil?: string;
 
   @IsString()
   @IsNotEmpty()
@@ -46,14 +69,34 @@ export class CreateAddressDto {
   @ApiProperty({
     type: [Number],
     description: 'Coordinates as [longitude, latitude]',
-    example: [77.1025, 28.7041]
+    example: [77.1025, 28.7041],
   })
   @IsArray()
   @ArrayMinSize(2)
   @IsNumber({}, { each: true })
-  coordinates: number[];
+  coordinates: [number, number];
+
+  @ApiPropertyOptional({ description: 'GPS accuracy in meters' })
+  @IsNumber()
+  @IsOptional()
+  accuracy?: number;
+
+  @ApiPropertyOptional({ type: [String], description: 'Supported service categories' })
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  serviceCategories?: string[];
+
+  @ApiPropertyOptional({ description: 'Directions or access information' })
+  @IsString()
+  @IsOptional()
+  accessInstructions?: string;
 
   @IsBoolean()
   @IsOptional()
   isDefault?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  isActive?: boolean;
 }

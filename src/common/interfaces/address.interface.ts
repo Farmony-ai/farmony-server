@@ -1,5 +1,17 @@
 import { Types } from 'mongoose';
 
+export enum AddressType {
+  HOME = 'home',
+  WORK = 'work',
+  PERSONAL = 'personal',
+  OTHER = 'other',
+  FARM = 'farm',
+  WAREHOUSE = 'warehouse',
+  SERVICE_AREA = 'service_area',
+  DELIVERY_POINT = 'delivery_point',
+  MEETING_SPOT = 'meeting_spot',
+}
+
 export interface IAddress {
   addressLine1: string;
   addressLine2?: string;
@@ -9,7 +21,7 @@ export interface IAddress {
   state: string;
   pincode: string;
   coordinates: [number, number]; // [longitude, latitude]
-  addressType?: string;
+  addressType?: AddressType;
   customLabel?: string;
 }
 
@@ -28,7 +40,7 @@ export interface IResolvedAddress {
 }
 
 export interface CreateAddressDto {
-  addressType: string;
+  addressType: AddressType;
   customLabel?: string;
   addressLine1: string;
   addressLine2?: string;

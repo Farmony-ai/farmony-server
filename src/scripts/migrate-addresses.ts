@@ -2,21 +2,106 @@
 // Run this script to migrate existing listings and service requests to use addresses
 
 import { connect, model } from 'mongoose';
-import { ListingSchema } from 'src/modules/listings/listings.schema';
-import { AddressSchema } from 'src/modules/addresses/addresses.schema';
-import { UserSchema } from 'src/modules/users/users.schema';
-import { ServiceRequestSchema } from 'src/modules/service-requests/entities/service-request.entity';
+import * as path from 'path';
+import { config as loadEnv } from 'dotenv';
+import { ListingSchema } from '../modules/listings/listings.schema';
+import { AddressSchema } from '../modules/addresses/addresses.schema';
+import { UserSchema } from '../modules/users/users.schema';
+import { ServiceRequestSchema } from '../modules/service-requests/entities/service-request.entity';
+import { AddressType } from '../common/interfaces/address.interface';
 
 const Listing = model('Listing', ListingSchema);
 const Address = model('Address', AddressSchema);
 const User = model('User', UserSchema);
 const ServiceRequest = model('ServiceRequest', ServiceRequestSchema);
 
+const NEAR_DISTANCE_METERS = 25;
+
+function isValidCoordinates(value: any): value is [number, number] {
+  return (
+    Array.isArray(value) &&
+    value.length === 2 &&
+    typeof value[0] === 'number' &&
+    typeof value[1] === 'number' &&
+    !Number.isNaN(value[0]) &&
+    !Number.isNaN(value[1])
+  );
+}
+
+function buildGeoPoint(coordinates: [number, number]) {
+  return {
+    type: 'Point',
+    coordinates,
+  };
+}
+
+async function ensureAddressGeo(address: any, coordinates: [number, number]) {
+  let changed = false;
+
+  if (!address.location || !isValidCoordinates(address.location.coordinates)) {
+    address.location = buildGeoPoint(coordinates);
+    changed = true;
+  }
+
+  if (!isValidCoordinates(address.coordinates)) {
+    address.coordinates = coordinates;
+    changed = true;
+  }
+
+  if (changed) {
+    await address.save();
+  }
+}
+
+async function findExistingAddress(
+  userId: any,
+  coordinates: [number, number],
+): Promise<any | null> {
+  try {
+    const geoMatch = await Address.findOne({
+      userId,
+      location: {
+        $near: {
+          $geometry: { type: 'Point', coordinates },
+          $maxDistance: NEAR_DISTANCE_METERS,
+        },
+      },
+    });
+
+    if (geoMatch) {
+      await ensureAddressGeo(geoMatch, coordinates);
+      return geoMatch;
+    }
+  } catch (error) {
+    console.warn(`Geo lookup failed for user ${userId}: ${(error as Error).message}`);
+  }
+
+  const legacyMatch = await Address.findOne({ userId, coordinates });
+  if (legacyMatch) {
+    await ensureAddressGeo(legacyMatch, coordinates);
+    return legacyMatch;
+  }
+
+  return null;
+}
+
 async function migrateAddresses() {
+  const env = process.env.NODE_ENV || 'dev';
+  const envPath = path.resolve(__dirname, '..', '..', `.env.${env}`);
+  loadEnv({ path: envPath });
+
+  const mongoUri =
+    env === 'prod' ? process.env.MONGO_URI_PROD : process.env.MONGO_URI_DEV;
+
+  if (!mongoUri) {
+    throw new Error(`Mongo URI not set. Expected ${env === 'prod' ? 'MONGO_URI_PROD' : 'MONGO_URI_DEV'} in ${envPath}`);
+  }
+
   // Connect to MongoDB
-  await connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/ruralshare');
+  console.log(`Connecting to MongoDB (${env})...`);
+  await connect(mongoUri);
   
-  console.log('Starting address migration...');
+  console.log('Connected. Starting address migration...');
   
   // 1. Migrate Listings
   console.log('\n=== Migrating Listings ===');
@@ -30,28 +115,27 @@ async function migrateAddresses() {
   for (const listing of listings) {
     try {
       // Check if listing has valid coordinates
-      if (!listing.location?.coordinates || listing.location.coordinates.length !== 2) {
+      const coordinates = listing.location?.coordinates;
+      if (!isValidCoordinates(coordinates)) {
         console.warn(`Skipping listing ${listing._id} - invalid coordinates`);
         continue;
       }
       
       // Check if address already exists at these coordinates for this provider
-      let address = await Address.findOne({
-        userId: listing.providerId,
-        coordinates: listing.location.coordinates
-      });
+      let address = await findExistingAddress(listing.providerId, coordinates);
       
       if (!address) {
         // Create new address for this listing location
         address = new Address({
           userId: listing.providerId,
-          tag: 'listing',
+          addressType: AddressType.SERVICE_AREA,
           addressLine1: `Listing Location - ${listing.title || 'Service'}`,
           village: 'Update Required',
           district: 'Update Required', 
           state: 'Update Required',
           pincode: '000000',
-          coordinates: listing.location.coordinates,
+          location: buildGeoPoint(coordinates),
+          coordinates,
           isDefault: false
         });
         
@@ -59,6 +143,8 @@ async function migrateAddresses() {
         console.log(`Created address ${address._id} for listing ${listing._id}`);
       }
       
+      await ensureAddressGeo(address, coordinates);
+
       // Update listing with address reference
       listing.serviceAddressId = address._id;
       await listing.save();
@@ -81,28 +167,27 @@ async function migrateAddresses() {
   for (const request of serviceRequests) {
     try {
       // Check if request has valid coordinates
-      if (!request.location?.coordinates || request.location.coordinates.length !== 2) {
+      const coordinates = request.location?.coordinates;
+      if (!isValidCoordinates(coordinates)) {
         console.warn(`Skipping service request ${request._id} - invalid coordinates`);
         continue;
       }
       
       // Check if address already exists at these coordinates for this seeker
-      let address = await Address.findOne({
-        userId: request.seekerId,
-        coordinates: request.location.coordinates
-      });
+      let address = await findExistingAddress(request.seekerId, coordinates);
       
       if (!address) {
         // Create new address for this service location
         address = new Address({
           userId: request.seekerId,
-          tag: 'service_request',
+          addressType: AddressType.SERVICE_AREA,
           addressLine1: request.address || `Service Request - ${request.title}`,
           village: 'Update Required',
           district: 'Update Required',
           state: 'Update Required',
           pincode: '000000',
-          coordinates: request.location.coordinates,
+          location: buildGeoPoint(coordinates),
+          coordinates,
           isDefault: false
         });
         
@@ -110,6 +195,8 @@ async function migrateAddresses() {
         console.log(`Created address ${address._id} for service request ${request._id}`);
       }
       
+      await ensureAddressGeo(address, coordinates);
+
       // Update service request with address reference
       request.serviceAddressId = address._id;
       await request.save();
@@ -142,16 +229,20 @@ async function migrateAddresses() {
   
   for (const user of usersWithoutAddresses) {
     try {
-      // Create a default address for the user
+      const fallbackCoordinates: [number, number] = isValidCoordinates(user.coordinates)
+        ? user.coordinates
+        : [77.2090, 28.6139];
+
       const address = new Address({
         userId: user._id,
-        tag: 'home',
+        addressType: AddressType.HOME,
         addressLine1: 'Please Update',
         village: 'Please Update',
         district: 'Please Update',
         state: 'Please Update',
         pincode: '000000',
-        coordinates: user.coordinates || [77.2090, 28.6139], // Default to Delhi if no coordinates
+        location: buildGeoPoint(fallbackCoordinates),
+        coordinates: fallbackCoordinates, // Default to Delhi if no coordinates
         isDefault: true
       });
       
@@ -182,36 +273,39 @@ async function migrateAddresses() {
       // Check if user has default address
       if (user.defaultAddressId) {
         const address = await Address.findById(user.defaultAddressId);
-        if (address && (!address.coordinates || address.coordinates.length !== 2)) {
-          // Update address with user's coordinates
-          address.coordinates = user.coordinates;
-          await address.save();
+        if (address && isValidCoordinates(user.coordinates)) {
+          await ensureAddressGeo(address, user.coordinates as [number, number]);
           console.log(`Updated address ${address._id} with coordinates from user ${user._id}`);
         }
-      } else {
+      } else if (isValidCoordinates(user.coordinates)) {
         // Create default address with these coordinates
+        const coordinates = user.coordinates as [number, number];
         const address = new Address({
           userId: user._id,
-          tag: 'home',
+          addressType: AddressType.HOME,
           addressLine1: 'Migrated from User',
           village: 'Please Update',
           district: 'Please Update',
           state: 'Please Update',
           pincode: '000000',
-          coordinates: user.coordinates,
+          location: buildGeoPoint(coordinates),
+          coordinates,
           isDefault: true
         });
-        
+
         await address.save();
         user.defaultAddressId = address._id;
         await user.save();
         console.log(`Created address ${address._id} from user ${user._id} coordinates`);
+      } else if (user.coordinates) {
+        console.log(`Removing invalid coordinates for user ${user._id}`);
       }
       
-      // Remove coordinates from user
-      await User.findByIdAndUpdate(user._id, {
-        $unset: { coordinates: 1 }
-      });
+      if (user.coordinates) {
+        await User.findByIdAndUpdate(user._id, {
+          $unset: { coordinates: 1 }
+        });
+      }
       
     } catch (error) {
       console.error(`Error migrating user ${user._id} coordinates:`, error);

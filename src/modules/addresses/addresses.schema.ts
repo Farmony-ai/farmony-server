@@ -89,6 +89,7 @@ export class Address {
   // Backward compatibility - keep old 'coordinates' field for existing data
   @Prop({ type: [Number] })
   coordinates?: number[]; // Deprecated: use location.coordinates instead
+  private _id: any;
 }
 
 export const AddressSchema = SchemaFactory.createForClass(Address);

@@ -20,9 +20,9 @@ import { UpdateServiceRequestDto } from './dto/update-service-request.dto';
 import { AcceptServiceRequestDto } from './dto/accept-service-request.dto';
 import { ListingsService } from '../listings/listings.service';
 import { OrdersService } from '../orders/orders.service';
-import { UsersService } from '../users/users.service';
 import { ChatGateway } from '../chat/chat.gateway';
 import { AddressesService } from '../addresses/addresses.service';
+import { AddressType } from '../../common/interfaces/address.interface';
 
 // Configuration for wave-based notifications
 const WAVE_CONFIG = {
@@ -42,7 +42,7 @@ export class ServiceRequestsService {
     private readonly serviceRequestModel: Model<ServiceRequestDocument>,
     private readonly listingsService: ListingsService,
     private readonly ordersService: OrdersService,
-    private readonly usersService: UsersService,
+    private readonly addressesService: AddressesService,
     private readonly chatGateway: ChatGateway,
     private readonly addressesService: AddressesService,
   ) {}
@@ -58,40 +58,42 @@ export class ServiceRequestsService {
 
   // Handle address resolution
   let serviceAddressId: string;
-  let coordinates: number[];
+  let coordinates: [number, number];
 
-  // Option 1: Address ID provided
   if (createDto.addressId) {
     const address = await this.addressesService.getValidatedAddress(createDto.addressId);
-    const addressDoc = address as any; // Cast to access _id
-    serviceAddressId = addressDoc._id.toString();
-    coordinates = address.coordinates || address.location?.coordinates || [];
-  }
-  // Option 2: Coordinates provided - create/find address
-  else if (createDto.location) {
+    serviceAddressId = address._id.toString();
+    coordinates = this.getCoordinatesFromAddress(address);
+  } else if (createDto.location) {
+    const { lat, lon } = createDto.location;
+    if (typeof lat !== 'number' || typeof lon !== 'number') {
+      throw new BadRequestException('location.lat and location.lon must be numbers');
+    }
+
+    const requestCoordinates: [number, number] = [lon, lat];
     const address = await this.addressesService.findOrCreateByCoordinates(
       seekerId,
-      [createDto.location.lon, createDto.location.lat],
+      requestCoordinates,
       {
-        tag: 'other' as any, // Using 'other' instead of 'service_request'
+        addressType: AddressType.SERVICE_AREA,
         addressLine1: createDto.addressLine1 || 'Service Location',
         village: createDto.village || 'Not Specified',
         district: createDto.district || 'Not Specified',
         state: createDto.state || 'Not Specified',
         pincode: createDto.pincode || '000000',
-      }
+        customLabel: createDto.addressLine1,
+        isDefault: false,
+      },
     );
-    const addressDoc = address as any; // Cast to access _id
-    serviceAddressId = addressDoc._id.toString();
-    coordinates = address.coordinates || address.location?.coordinates || [];
-  }
-  // Option 3: Use seeker's default address
-  else {
+    serviceAddressId = address._id.toString();
+    coordinates = this.getCoordinatesFromAddress(address);
+  } else {
     const address = await this.addressesService.getDefaultServiceAddress(seekerId);
-    const addressDoc = address as any; // Cast to access _id
-    serviceAddressId = addressDoc._id.toString();
-    coordinates = address.coordinates || address.location?.coordinates || [];
+    serviceAddressId = address._id.toString();
+    coordinates = this.getCoordinatesFromAddress(address);
   }
+
+  await this.addressesService.updateUsage(serviceAddressId).catch(() => undefined);
 
   const serviceRequest = new this.serviceRequestModel({
     _id: requestId,
@@ -125,6 +127,74 @@ export class ServiceRequestsService {
 
   return savedRequest;
 }
+
+  async update(
+    id: string,
+    updateDto: UpdateServiceRequestDto,
+    userId: string,
+  ): Promise<ServiceRequest> {
+    const request = await this.serviceRequestModel.findById(id);
+
+    if (!request) {
+      throw new NotFoundException('Service request not found');
+    }
+
+    if (request.seekerId.toString() !== userId) {
+      throw new ForbiddenException('You can only update your own service requests');
+    }
+
+    if (
+      request.status !== ServiceRequestStatus.OPEN &&
+      request.status !== ServiceRequestStatus.MATCHED
+    ) {
+      throw new BadRequestException('Only open or matched requests can be updated');
+    }
+
+    const updatePayload: any = {};
+
+    if (updateDto.addressId) {
+      const address = await this.addressesService.getValidatedAddress(updateDto.addressId);
+      updatePayload.serviceAddressId = address._id;
+      updatePayload.location = {
+        type: 'Point',
+        coordinates: this.getCoordinatesFromAddress(address),
+      };
+
+      await this.addressesService.updateUsage(address._id.toString()).catch(() => undefined);
+    }
+
+    const mutableFields: Array<keyof UpdateServiceRequestDto> = [
+      'title',
+      'description',
+      'serviceStartDate',
+      'serviceEndDate',
+      'metadata',
+      'attachments',
+      'cancellationReason',
+    ];
+
+    for (const field of mutableFields) {
+      if (updateDto[field] !== undefined) {
+        updatePayload[field] = updateDto[field];
+      }
+    }
+
+    if (Object.keys(updatePayload).length === 0) {
+      return this.findById(id);
+    }
+
+    const updated = await this.serviceRequestModel.findByIdAndUpdate(
+      id,
+      { $set: updatePayload },
+      { new: true },
+    );
+
+    if (!updated) {
+      throw new NotFoundException('Service request not found');
+    }
+
+    return this.findById(id);
+  }
 
 
   async processNextWave(requestId: string): Promise<void> {
@@ -705,5 +775,17 @@ export class ServiceRequestsService {
     }
 
     this.logger.log(`Provider ${providerId} declined request ${requestId}`);
+  }
+
+  private getCoordinatesFromAddress(address: any): [number, number] {
+    if (address?.location?.coordinates && address.location.coordinates.length === 2) {
+      return address.location.coordinates as [number, number];
+    }
+
+    if (Array.isArray(address?.coordinates) && address.coordinates.length === 2) {
+      return address.coordinates as [number, number];
+    }
+
+    throw new BadRequestException('Address is missing valid coordinates');
   }
 }
