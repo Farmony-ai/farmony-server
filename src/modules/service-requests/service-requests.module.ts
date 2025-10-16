@@ -9,6 +9,7 @@ import { OrdersModule } from '../orders/orders.module';
 import { UsersModule } from '../users/users.module';
 import { ChatModule } from '../chat/chat.module';
 import { AwsModule } from '../aws/aws.module';
+import { AddressesModule } from '../addresses/addresses.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { AwsModule } from '../aws/aws.module';
     UsersModule,
     ChatModule,
     AwsModule,
+    AddressesModule,
   ],
   controllers: [ServiceRequestsController],
   providers: [ServiceRequestsService],

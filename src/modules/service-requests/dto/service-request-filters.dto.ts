@@ -1,4 +1,4 @@
-import { IsOptional, IsEnum, IsMongoId, IsNumber, Min } from 'class-validator';
+import { IsOptional, IsEnum, IsMongoId, IsNumber, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ServiceRequestStatus } from '../entities/service-request.entity';
 

@@ -57,10 +57,11 @@ export class ListingsService {
   // Option 1: Address ID provided
   if (dto.addressId) {
     const address = await this.addressesService.getValidatedAddress(dto.addressId);
-    serviceAddressId = address._id.toString();
+    const addressDoc = address as any; // Cast to access _id
+    serviceAddressId = addressDoc._id.toString();
     locationData = {
       type: 'Point',
-      coordinates: address.coordinates
+      coordinates: address.coordinates || address.location?.coordinates || []
     };
   }
   // Option 2: Coordinates provided - create address
@@ -69,7 +70,7 @@ export class ListingsService {
       dto.providerId,
       dto.location.coordinates,
       {
-        tag: 'listing',
+        tag: 'other' as any, // Using 'other' instead of 'listing'
         addressLine1: dto.addressLine1 || 'Listing Location',
         village: dto.village || '',
         district: dto.district || '',
@@ -77,22 +78,24 @@ export class ListingsService {
         pincode: dto.pincode || '',
       }
     );
-    serviceAddressId = address._id.toString();
+    const addressDoc = address as any; // Cast to access _id
+    serviceAddressId = addressDoc._id.toString();
     locationData = {
       type: 'Point',
-      coordinates: address.coordinates
+      coordinates: address.coordinates || address.location?.coordinates || []
     };
   }
   // Option 3: Use provider's default address
   else {
     const address = await this.addressesService.getDefaultServiceAddress(dto.providerId);
-    serviceAddressId = address._id.toString();
+    const addressDoc = address as any; // Cast to access _id
+    serviceAddressId = addressDoc._id.toString();
     locationData = {
       type: 'Point',
-      coordinates: address.coordinates
+      coordinates: address.coordinates || address.location?.coordinates || []
     };
-    
-    console.log(`Using provider's default address: ${address._id}`);
+
+    console.log(`Using provider's default address: ${addressDoc._id}`);
   }
 
   const listing = new this.listingModel({
