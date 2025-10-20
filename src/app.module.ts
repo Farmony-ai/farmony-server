@@ -20,6 +20,7 @@ import databaseConfig from './config/database.config';
 import { AwsModule } from './modules/aws/aws.module';
 import { MatchesModule } from './modules/matches/matches.module';
 import { ServiceRequestsModule } from './modules/service-requests/service-requests.module';
+import { SeekerModule } from './modules/seeker/seeker.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { ServiceRequestsModule } from './modules/service-requests/service-reques
     AwsModule,
     MatchesModule,
     ServiceRequestsModule,
+    SeekerModule,
   ],
 })
 export class AppModule {}

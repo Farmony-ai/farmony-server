@@ -44,7 +44,6 @@ export class ServiceRequestsService {
     private readonly ordersService: OrdersService,
     private readonly addressesService: AddressesService,
     private readonly chatGateway: ChatGateway,
-    private readonly addressesService: AddressesService,
   ) {}
 
   async create(
@@ -617,40 +616,6 @@ export class ServiceRequestsService {
         requestId: id,
         reason: 'expired',
       });
-    }
-
-    return updatedRequest;
-  }
-
-  async update(
-    id: string,
-    updateDto: UpdateServiceRequestDto,
-    userId: string,
-  ): Promise<ServiceRequest> {
-    const request = await this.findById(id);
-
-    if (request.seekerId.toString() !== userId) {
-      throw new ForbiddenException('You can only update your own requests');
-    }
-
-    // Only allow updates if request is still OPEN or MATCHED
-    if (request.status !== ServiceRequestStatus.OPEN &&
-        request.status !== ServiceRequestStatus.MATCHED) {
-      throw new BadRequestException('Cannot update request in current status');
-    }
-
-    const updatedRequest = await this.serviceRequestModel.findByIdAndUpdate(
-      id,
-      { $set: updateDto },
-      { new: true },
-    )
-      .populate('seekerId', 'name phone email')
-      .populate('categoryId', 'name icon')
-      .populate('subCategoryId', 'name')
-      .lean();
-
-    if (!updatedRequest) {
-      throw new NotFoundException('Service request not found');
     }
 
     return updatedRequest;
