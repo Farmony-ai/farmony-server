@@ -47,85 +47,90 @@ export class ServiceRequestsService {
   ) {}
 
   async create(
-  createDto: CreateServiceRequestDto,
-  seekerId: string,
-): Promise<ServiceRequest> {
-  const expiresAt = new Date();
-  expiresAt.setHours(expiresAt.getHours() + WAVE_CONFIG.expiryHours);
+    createDto: CreateServiceRequestDto,
+    seekerId: string,
+  ): Promise<ServiceRequest> {
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + WAVE_CONFIG.expiryHours);
 
-  const requestId = uuidv4();
+    const requestId = uuidv4();
 
-  // Handle address resolution
-  let serviceAddressId: string;
-  let coordinates: [number, number];
+    // Handle address resolution
+    let serviceAddressId: string;
+    let coordinates: [number, number];
 
-  if (createDto.addressId) {
-    const address = await this.addressesService.getValidatedAddress(createDto.addressId);
-    serviceAddressId = address._id.toString();
-    coordinates = this.getCoordinatesFromAddress(address);
-  } else if (createDto.location) {
-    const { lat, lon } = createDto.location;
-    if (typeof lat !== 'number' || typeof lon !== 'number') {
-      throw new BadRequestException('location.lat and location.lon must be numbers');
+    const addressId = createDto.addressId ?? createDto.serviceAddressId;
+
+    if (addressId) {
+      const address = await this.addressesService.getValidatedAddress(addressId);
+      if (address.userId.toString() !== seekerId) {
+        throw new ForbiddenException('Address does not belong to the current user');
+      }
+      serviceAddressId = address._id.toString();
+      coordinates = this.getCoordinatesFromAddress(address);
+    } else if (createDto.location) {
+      const { lat, lon } = createDto.location;
+      if (typeof lat !== 'number' || typeof lon !== 'number') {
+        throw new BadRequestException('location.lat and location.lon must be numbers');
+      }
+
+      const requestCoordinates: [number, number] = [lon, lat];
+      const address = await this.addressesService.findOrCreateByCoordinates(
+        seekerId,
+        requestCoordinates,
+        {
+          addressType: AddressType.SERVICE_AREA,
+          addressLine1: createDto.addressLine1 || 'Service Location',
+          village: createDto.village || 'Not Specified',
+          district: createDto.district || 'Not Specified',
+          state: createDto.state || 'Not Specified',
+          pincode: createDto.pincode || '000000',
+          customLabel: createDto.addressLine1,
+          isDefault: false,
+        },
+      );
+      serviceAddressId = address._id.toString();
+      coordinates = this.getCoordinatesFromAddress(address);
+    } else {
+      const address = await this.addressesService.getDefaultServiceAddress(seekerId);
+      serviceAddressId = address._id.toString();
+      coordinates = this.getCoordinatesFromAddress(address);
     }
 
-    const requestCoordinates: [number, number] = [lon, lat];
-    const address = await this.addressesService.findOrCreateByCoordinates(
-      seekerId,
-      requestCoordinates,
-      {
-        addressType: AddressType.SERVICE_AREA,
-        addressLine1: createDto.addressLine1 || 'Service Location',
-        village: createDto.village || 'Not Specified',
-        district: createDto.district || 'Not Specified',
-        state: createDto.state || 'Not Specified',
-        pincode: createDto.pincode || '000000',
-        customLabel: createDto.addressLine1,
-        isDefault: false,
+    await this.addressesService.updateUsage(serviceAddressId).catch(() => undefined);
+
+    const serviceRequest = new this.serviceRequestModel({
+      _id: requestId,
+      seekerId: new Types.ObjectId(seekerId),
+      categoryId: new Types.ObjectId(createDto.categoryId),
+      subCategoryId: createDto.subCategoryId
+        ? new Types.ObjectId(createDto.subCategoryId)
+        : undefined,
+      title: createDto.title,
+      description: createDto.description,
+      location: {
+        type: 'Point',
+        coordinates: coordinates,
       },
-    );
-    serviceAddressId = address._id.toString();
-    coordinates = this.getCoordinatesFromAddress(address);
-  } else {
-    const address = await this.addressesService.getDefaultServiceAddress(seekerId);
-    serviceAddressId = address._id.toString();
-    coordinates = this.getCoordinatesFromAddress(address);
+      serviceAddressId: new Types.ObjectId(serviceAddressId), // Link to address
+      serviceStartDate: createDto.serviceStartDate,
+      serviceEndDate: createDto.serviceEndDate,
+      status: ServiceRequestStatus.OPEN,
+      expiresAt,
+      metadata: createDto.metadata,
+      attachments: createDto.attachments || [],
+      currentWave: 0,
+      notificationWaves: [],
+      allNotifiedProviders: [],
+    });
+
+    const savedRequest = await serviceRequest.save();
+
+    // Start the first wave of notifications
+    await this.processNextWave(savedRequest._id);
+
+    return savedRequest;
   }
-
-  await this.addressesService.updateUsage(serviceAddressId).catch(() => undefined);
-
-  const serviceRequest = new this.serviceRequestModel({
-    _id: requestId,
-    seekerId: new Types.ObjectId(seekerId),
-    categoryId: new Types.ObjectId(createDto.categoryId),
-    subCategoryId: createDto.subCategoryId
-      ? new Types.ObjectId(createDto.subCategoryId)
-      : undefined,
-    title: createDto.title,
-    description: createDto.description,
-    location: {
-      type: 'Point',
-      coordinates: coordinates,
-    },
-    serviceAddressId: new Types.ObjectId(serviceAddressId), // Link to address
-    serviceStartDate: createDto.serviceStartDate,
-    serviceEndDate: createDto.serviceEndDate,
-    status: ServiceRequestStatus.OPEN,
-    expiresAt,
-    metadata: createDto.metadata,
-    attachments: createDto.attachments || [],
-    currentWave: 0,
-    notificationWaves: [],
-    allNotifiedProviders: [],
-  });
-
-  const savedRequest = await serviceRequest.save();
-
-  // Start the first wave of notifications
-  await this.processNextWave(savedRequest._id);
-
-  return savedRequest;
-}
 
   async update(
     id: string,
@@ -151,8 +156,13 @@ export class ServiceRequestsService {
 
     const updatePayload: any = {};
 
-    if (updateDto.addressId) {
-      const address = await this.addressesService.getValidatedAddress(updateDto.addressId);
+    const updateAddressId = updateDto.addressId ?? updateDto.serviceAddressId;
+
+    if (updateAddressId) {
+      const address = await this.addressesService.getValidatedAddress(updateAddressId);
+      if (address.userId.toString() !== userId) {
+        throw new ForbiddenException('Address does not belong to the current user');
+      }
       updatePayload.serviceAddressId = address._id;
       updatePayload.location = {
         type: 'Point',
@@ -673,10 +683,26 @@ export class ServiceRequestsService {
       .populate('subCategoryId', 'name')
       .populate('acceptedProviderId', 'name phone profilePicture')
       .populate('acceptedListingId', 'title price unitOfMeasure')
+      .populate('serviceAddressId')
       .lean();
 
     if (!request) {
       throw new NotFoundException('Service request not found');
+    }
+
+    // Add formatted address string from serviceAddressId
+    if (request.serviceAddressId && typeof request.serviceAddressId === 'object') {
+      const addr = request.serviceAddressId as any;
+      request.address = [
+        addr.addressLine1,
+        addr.addressLine2,
+        addr.village,
+        addr.district,
+        addr.state,
+        addr.pincode,
+      ]
+        .filter(Boolean)
+        .join(', ');
     }
 
     return request;
@@ -712,6 +738,7 @@ export class ServiceRequestsService {
         .populate('seekerId', 'name phone email')
         .populate('categoryId', 'name icon')
         .populate('subCategoryId', 'name')
+        .populate('serviceAddressId')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
@@ -719,7 +746,25 @@ export class ServiceRequestsService {
       this.serviceRequestModel.countDocuments(query),
     ]);
 
-    return { requests, total };
+    // Add formatted address strings
+    const requestsWithAddresses = requests.map((request) => {
+      if (request.serviceAddressId && typeof request.serviceAddressId === 'object') {
+        const addr = request.serviceAddressId as any;
+        request.address = [
+          addr.addressLine1,
+          addr.addressLine2,
+          addr.village,
+          addr.district,
+          addr.state,
+          addr.pincode,
+        ]
+          .filter(Boolean)
+          .join(', ');
+      }
+      return request;
+    });
+
+    return { requests: requestsWithAddresses, total };
   }
 
   async decline(requestId: string, providerId: string, reason?: string): Promise<void> {

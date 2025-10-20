@@ -69,6 +69,11 @@ export class CreateServiceRequestDto {
   @IsMongoId()
   addressId?: string;
 
+  // Legacy alias used by some clients
+  @IsOptional()
+  @IsMongoId()
+  serviceAddressId?: string;
+
   // OPTION 2: Provide coordinates and address details
   @IsOptional()
   @ValidateNested()

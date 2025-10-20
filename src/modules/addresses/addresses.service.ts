@@ -373,6 +373,15 @@ export class AddressesService {
 
     let changed = false;
 
+    if (!address.addressType) {
+      const legacyTag = (address as any).tag;
+      address.addressType =
+        legacyTag && Object.values(AddressType).includes(legacyTag as AddressType)
+          ? (legacyTag as AddressType)
+          : AddressType.OTHER;
+      changed = true;
+    }
+
     const hasValidLocation =
       address.location?.coordinates && this.validateCoordinates(address.location.coordinates);
     if (!hasValidLocation) {
