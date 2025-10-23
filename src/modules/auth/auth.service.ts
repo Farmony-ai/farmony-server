@@ -1,20 +1,31 @@
-import { Injectable, UnauthorizedException, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { UsersService } from '../users/users.service';
 import * as bcrypt from 'bcrypt';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { OtpLoginDto } from './dto/otp-login.dto';
 import { LoginDto } from './dto/login.dto';
 import { v4 as uuidv4 } from 'uuid';
+import { RefreshToken, RefreshTokenDocument } from './schemas/refresh-token.schema';
+import { TOKEN_CONFIG } from './constants';
+
+export interface TokenMetadata {
+  ipAddress?: string;
+  userAgent?: string;
+  deviceId?: string;
+}
 
 @Injectable()
 export class AuthService {
-  // In-memory storage for refresh tokens (consider using Redis in production)
-  private refreshTokens = new Map<string, { userId: string; expiresAt: Date }>();
+  private readonly logger = new Logger(AuthService.name);
 
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
+    @InjectModel(RefreshToken.name) private refreshTokenModel: Model<RefreshTokenDocument>,
   ) {}
 
   async validateUser(loginDto: LoginDto) {
@@ -39,20 +50,20 @@ export class AuthService {
     return result;
   }
 
-  async login(user: any) {
+  async login(user: any, metadata?: TokenMetadata) {
     const payload = {
       sub: user._id,
       email: user.email,
       phone: user.phone,
       role: user.role,
     };
-    const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
-    const refreshToken = this.generateRefreshToken(user._id);
+    const accessToken = this.jwtService.sign(payload, { expiresIn: TOKEN_CONFIG.ACCESS_TOKEN_EXPIRY });
+    const refreshToken = await this.generateRefreshToken(user._id.toString(), undefined, metadata);
 
     return {
       access_token: accessToken,
       refresh_token: refreshToken,
-      expires_in: 900, // 15 minutes in seconds
+      expires_in: TOKEN_CONFIG.ACCESS_TOKEN_EXPIRY_SECONDS,
       token_type: 'Bearer',
       user: {
         id: user._id,
@@ -63,20 +74,25 @@ export class AuthService {
     };
   }
 
-  async register(createDto: CreateUserDto) {
+  async register(createDto: CreateUserDto, metadata?: TokenMetadata) {
     const user = await this.usersService.create(createDto);
     const { password, ...result } = user.toObject();
-    
+
     // Auto-login after registration
-    const payload = { email: user.email, sub: user._id };
-    const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
-    const refreshToken = this.generateRefreshToken(user._id.toString());
-    
+    const payload = {
+      sub: user._id,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+    };
+    const accessToken = this.jwtService.sign(payload, { expiresIn: TOKEN_CONFIG.ACCESS_TOKEN_EXPIRY });
+    const refreshToken = await this.generateRefreshToken(user._id.toString(), undefined, metadata);
+
     return {
       user: result,
       access_token: accessToken,
       refresh_token: refreshToken,
-      expires_in: 900,
+      expires_in: TOKEN_CONFIG.ACCESS_TOKEN_EXPIRY_SECONDS,
       token_type: 'Bearer',
     };
   }
@@ -121,8 +137,8 @@ export class AuthService {
       sub: user._id,
     };
 
-    const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
-    const refreshToken = this.generateRefreshToken(user._id.toString());
+    const accessToken = this.jwtService.sign(payload, { expiresIn: TOKEN_CONFIG.ACCESS_TOKEN_EXPIRY });
+    const refreshToken = await this.generateRefreshToken(user._id.toString());
 
     // Return success response (maintaining backward compatibility)
     return {
@@ -130,7 +146,7 @@ export class AuthService {
       token: accessToken, // For backward compatibility
       access_token: accessToken,
       refresh_token: refreshToken,
-      expires_in: 900,
+      expires_in: TOKEN_CONFIG.ACCESS_TOKEN_EXPIRY_SECONDS,
       token_type: 'Bearer',
       user: {
         id: user._id,
@@ -146,43 +162,75 @@ export class AuthService {
     };
   }
 
-  private generateRefreshToken(userId: string): string {
-    const refreshToken = uuidv4();
+  private async generateRefreshToken(
+    userId: string,
+    family?: string,
+    metadata?: TokenMetadata,
+  ): Promise<string> {
+    const token = uuidv4();
+    const tokenFamily = family || uuidv4(); // Create or reuse family for rotation tracking
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30); // Refresh token valid for 30 days
+    expiresAt.setDate(expiresAt.getDate() + TOKEN_CONFIG.REFRESH_TOKEN_EXPIRY_DAYS);
 
-    this.refreshTokens.set(refreshToken, {
-      userId,
-      expiresAt
+    // Save to database
+    await this.refreshTokenModel.create({
+      token,
+      userId: new Types.ObjectId(userId),
+      expiresAt,
+      issuedAt: new Date(),
+      family: tokenFamily,
+      metadata,
     });
 
-    // Clean up expired tokens periodically
-    this.cleanupExpiredTokens();
-
-    return refreshToken;
+    return token;
   }
 
-  async refreshToken(refreshToken: string) {
-    const tokenData = this.refreshTokens.get(refreshToken);
+  async refreshToken(refreshToken: string, metadata?: TokenMetadata) {
+    // 1. Validate refresh token
+    const tokenDoc = await this.refreshTokenModel.findOne({
+      token: refreshToken,
+      isRevoked: false,
+    });
 
-    if (!tokenData) {
+    if (!tokenDoc) {
+      // Check if token was revoked (reuse detection)
+      const revokedToken = await this.refreshTokenModel.findOne({ token: refreshToken });
+      if (revokedToken?.isRevoked) {
+        // Token reuse detected! Revoke entire family for security
+        await this.revokeTokenFamily(revokedToken.family);
+        this.logger.warn(`Token reuse detected for family ${revokedToken.family}`);
+        throw new UnauthorizedException('Token reuse detected. Please login again.');
+      }
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    if (new Date() > tokenData.expiresAt) {
-      this.refreshTokens.delete(refreshToken);
+    // 2. Check expiry
+    if (new Date() > tokenDoc.expiresAt) {
+      await tokenDoc.updateOne({ isRevoked: true, revokedAt: new Date() });
       throw new UnauthorizedException('Refresh token expired');
     }
 
-    const user = await this.usersService.findById(tokenData.userId);
+    // 3. Get user
+    const user = await this.usersService.findById(tokenDoc.userId.toString());
     if (!user) {
       throw new UnauthorizedException('User not found');
     }
 
-    // Delete old refresh token
-    this.refreshTokens.delete(refreshToken);
+    // 4. Revoke old token (rotation)
+    tokenDoc.isRevoked = true;
+    tokenDoc.revokedAt = new Date();
 
-    // Generate new tokens with the same payload structure as login
+    // 5. Generate NEW tokens (sliding window - extends 30d from now)
+    const newRefreshToken = await this.generateRefreshToken(
+      user._id.toString(),
+      tokenDoc.family, // Same family for rotation tracking
+      metadata,
+    );
+
+    // 6. Track replacement chain
+    tokenDoc.replacedBy = newRefreshToken;
+    await tokenDoc.save();
+
     const payload = {
       sub: user._id,
       email: user.email,
@@ -190,33 +238,42 @@ export class AuthService {
       role: user.role,
     };
 
-    const newAccessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
-    const newRefreshToken = this.generateRefreshToken(user._id.toString());
+    const newAccessToken = this.jwtService.sign(payload, {
+      expiresIn: TOKEN_CONFIG.ACCESS_TOKEN_EXPIRY,
+    });
 
     return {
       access_token: newAccessToken,
       refresh_token: newRefreshToken,
-      expires_in: 900,
+      expires_in: TOKEN_CONFIG.ACCESS_TOKEN_EXPIRY_SECONDS,
       token_type: 'Bearer',
     };
   }
 
-  private cleanupExpiredTokens() {
-    const now = new Date();
-    for (const [token, data] of this.refreshTokens.entries()) {
-      if (now > data.expiresAt) {
-        this.refreshTokens.delete(token);
-      }
-    }
+  private async revokeTokenFamily(family: string): Promise<void> {
+    // Security: revoke all tokens in the family if reuse detected
+    await this.refreshTokenModel.updateMany(
+      { family, isRevoked: false },
+      { isRevoked: true, revokedAt: new Date() },
+    );
+    this.logger.warn(`Revoked token family ${family} due to reuse detection`);
   }
 
-  // Optional: Add method to revoke all refresh tokens for a user
+  // Cleanup cron job - runs daily at midnight
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  async cleanupExpiredTokens() {
+    const deleted = await this.refreshTokenModel.deleteMany({
+      expiresAt: { $lt: new Date() },
+    });
+    this.logger.log(`Cleaned up ${deleted.deletedCount} expired refresh tokens`);
+  }
+
+  // Revoke all refresh tokens for a user (for logout)
   async revokeUserTokens(userId: string) {
-    for (const [token, data] of this.refreshTokens.entries()) {
-      if (data.userId === userId) {
-        this.refreshTokens.delete(token);
-      }
-    }
+    await this.refreshTokenModel.updateMany(
+      { userId: new Types.ObjectId(userId), isRevoked: false },
+      { isRevoked: true, revokedAt: new Date() },
+    );
   }
 
   // Optional: Add method to validate current access token
