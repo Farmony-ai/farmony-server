@@ -242,15 +242,23 @@ export class ServiceRequestsService {
     );
 
     if (providers.length < WAVE_CONFIG.minProvidersPerWave) {
-      // Not enough new providers in this wave, try next wave immediately
-      if (request.currentWave < WAVE_CONFIG.maxWaves - 1) {
-        request.currentWave++;
-        await request.save();
-        return this.processNextWave(requestId);
-      } else {
+      // Not enough new providers in this wave, schedule the next wave if available
+      if (waveNumber >= WAVE_CONFIG.maxWaves) {
         await this.handleNoProvidersAvailable(request);
         return;
       }
+
+      request.currentWave = waveNumber;
+      const nextWaveTime = new Date();
+      nextWaveTime.setMinutes(nextWaveTime.getMinutes() + WAVE_CONFIG.waveDelayMinutes);
+      request.nextWaveAt = nextWaveTime;
+      await request.save();
+
+      this.logger.log(
+        `Wave ${waveNumber} for request ${requestId} found no providers. ` +
+        `Scheduling next wave at ${nextWaveTime.toISOString()}`
+      );
+      return;
     }
 
     // Create wave record
