@@ -132,7 +132,7 @@ describe('AuthController', () => {
         refresh_token: mockAuthResponse.refresh_token,
         expires_in: mockAuthResponse.expires_in,
         token_type: mockAuthResponse.token_type,
-      } as any);
+      });
 
       const result = await controller.register(createUserDto);
 
