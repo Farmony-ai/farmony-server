@@ -3,3 +3,4 @@ dist/
 .env.dev
 .env.prod
 .env
+.DS_Store

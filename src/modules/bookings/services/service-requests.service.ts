@@ -1,0 +1,311 @@
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger, Inject, forwardRef } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { v4 as uuidv4 } from 'uuid';
+import { ServiceRequest, ServiceRequestDocument, ServiceRequestStatus, NotificationWave } from '../schemas/service-request.entity';
+import { CreateServiceRequestDto } from '../service-requests/dto/create-service-request.dto';
+import { UpdateServiceRequestDto } from '../service-requests/dto/update-service-request.dto';
+import { AcceptServiceRequestDto } from '../service-requests/dto/accept-service-request.dto';
+import { ListingsService } from '../services/listings/listings.service';
+import { OrdersService } from './orders.service';
+import { ChatGateway } from '../../chat/chat.gateway';
+import { AddressesService } from '../addresses/addresses.service';
+import { AddressType } from '../../common/interfaces/address.interface';
+import { WAVE_CONFIG } from '../../common/config/waves.config';
+import { AddressResolverService } from '../../common/services/address-resolver.service';
+import { NotificationService } from '../../common/services/notification.service';
+import { MatchesOrchestratorService } from './matches-orchestrator.service';
+
+@Injectable()
+export class ServiceRequestsService {
+    private readonly logger = new Logger(ServiceRequestsService.name);
+
+    constructor(
+        @InjectModel(ServiceRequest.name)
+        private readonly serviceRequestModel: Model<ServiceRequestDocument>,
+        private readonly listingsService: ListingsService,
+        private readonly ordersService: OrdersService,
+        private readonly addressesService: AddressesService,
+        private readonly chatGateway: ChatGateway,
+        private readonly addressResolverService: AddressResolverService,
+        private readonly notificationService: NotificationService,
+        @Inject(forwardRef(() => MatchesOrchestratorService))
+        private readonly matchesOrchestratorService: MatchesOrchestratorService
+    ) {}
+
+    async create(createDto: CreateServiceRequestDto, seekerId: string): Promise<ServiceRequest> {
+        const expiresAt = new Date();
+        expiresAt.setHours(expiresAt.getHours() + WAVE_CONFIG.expiryHours);
+
+        const requestId = uuidv4();
+
+        // Use AddressResolverService for address resolution
+        const { serviceAddressId, coordinates } = await this.addressResolverService.resolveForServiceRequestCreate(seekerId, createDto);
+
+        const serviceRequest = new this.serviceRequestModel({
+            _id: requestId,
+            seekerId: new Types.ObjectId(seekerId),
+            categoryId: new Types.ObjectId(createDto.categoryId),
+            subCategoryId: createDto.subCategoryId ? new Types.ObjectId(createDto.subCategoryId) : undefined,
+            title: createDto.title,
+            description: createDto.description,
+            location: {
+                type: 'Point',
+                coordinates: coordinates,
+            },
+            serviceAddressId: new Types.ObjectId(serviceAddressId),
+            serviceStartDate: createDto.serviceStartDate,
+            serviceEndDate: createDto.serviceEndDate,
+            status: ServiceRequestStatus.OPEN,
+            expiresAt,
+            metadata: createDto.metadata,
+            attachments: createDto.attachments || [],
+            currentWave: 0,
+            notificationWaves: [],
+            allNotifiedProviders: [],
+        });
+
+        const savedRequest = await serviceRequest.save();
+
+        // Start the first wave of notifications
+        await this.matchesOrchestratorService.startForRequest(savedRequest);
+
+        return savedRequest;
+    }
+
+    async update(id: string, updateDto: UpdateServiceRequestDto, userId: string): Promise<ServiceRequest> {
+        const request = await this.serviceRequestModel.findById(id);
+
+        if (!request) {
+            throw new NotFoundException('Service request not found');
+        }
+
+        if (request.seekerId.toString() !== userId) {
+            throw new ForbiddenException('You can only update your own service requests');
+        }
+
+        if (request.status !== ServiceRequestStatus.OPEN && request.status !== ServiceRequestStatus.MATCHED) {
+            throw new BadRequestException('Only open or matched requests can be updated');
+        }
+
+        const updatePayload: any = {};
+
+        const updateAddressId = updateDto.addressId ?? updateDto.serviceAddressId;
+
+        if (updateAddressId) {
+            const { serviceAddressId, coordinates } = await this.addressResolverService.resolveForServiceRequestUpdate(userId, updateAddressId);
+            updatePayload.serviceAddressId = new Types.ObjectId(serviceAddressId);
+            updatePayload.location = {
+                type: 'Point',
+                coordinates: coordinates,
+            };
+        }
+
+        const mutableFields: Array<keyof UpdateServiceRequestDto> = ['title', 'description', 'serviceStartDate', 'serviceEndDate', 'metadata', 'attachments', 'cancellationReason'];
+
+        for (const field of mutableFields) {
+            if (updateDto[field] !== undefined) {
+                updatePayload[field] = updateDto[field];
+            }
+        }
+
+        if (Object.keys(updatePayload).length === 0) {
+            return this.findById(id);
+        }
+
+        const updated = await this.serviceRequestModel.findByIdAndUpdate(id, { $set: updatePayload }, { new: true });
+
+        if (!updated) {
+            throw new NotFoundException('Service request not found');
+        }
+
+        return this.findById(id);
+    }
+
+    async accept(id: string, providerId: string, acceptDto?: AcceptServiceRequestDto): Promise<{ request: ServiceRequest; order: any }> {
+        return await this.matchesOrchestratorService.accept(id, providerId);
+    }
+
+    // Cron job to process pending waves
+    @Cron(CronExpression.EVERY_MINUTE)
+
+    // Cron job to expire old requests
+    @Cron(CronExpression.EVERY_10_MINUTES)
+    async expireOldRequests() {
+        const now = new Date();
+        const expiredRequests = await this.serviceRequestModel
+            .find({
+                status: { $in: [ServiceRequestStatus.OPEN, ServiceRequestStatus.MATCHED] },
+                expiresAt: { $lt: now },
+                isAutoExpired: false,
+            })
+            .limit(20);
+
+        for (const request of expiredRequests) {
+            try {
+                await this.expire(request._id);
+            } catch (error) {
+                this.logger.error(`Error expiring request ${request._id}:`, error);
+            }
+        }
+    }
+
+    async expire(id: string): Promise<ServiceRequest> {
+        const updatedRequest = await this.serviceRequestModel
+            .findByIdAndUpdate(
+                id,
+                {
+                    $set: {
+                        status: ServiceRequestStatus.EXPIRED,
+                        isAutoExpired: true,
+                        cancellationReason: 'Request expired - no provider accepted in time',
+                    },
+                },
+                { new: true }
+            )
+            .lean();
+
+        if (!updatedRequest) {
+            throw new NotFoundException('Service request not found');
+        }
+
+        // Notify seeker using NotificationService
+        await this.notificationService.notifySeekerExpired(updatedRequest.seekerId.toString(), id);
+
+        // Notify all notified providers using NotificationService
+        const providerIds = updatedRequest.allNotifiedProviders.map((pid) => pid.toString());
+        await this.notificationService.notifyProvidersClosed(providerIds, id, 'expired');
+
+        return updatedRequest;
+    }
+
+    async cancel(id: string, userId: string, reason?: string): Promise<ServiceRequest> {
+        const request = await this.findById(id);
+
+        if (request.seekerId.toString() !== userId) {
+            throw new ForbiddenException('You can only cancel your own requests');
+        }
+
+        if (request.status === ServiceRequestStatus.COMPLETED || request.status === ServiceRequestStatus.CANCELLED) {
+            throw new BadRequestException('Cannot cancel request in current status');
+        }
+
+        if (request.status === ServiceRequestStatus.ACCEPTED && request.orderId) {
+            throw new BadRequestException('Cannot cancel accepted request. Please cancel the order instead.');
+        }
+
+        const updatedRequest = await this.serviceRequestModel
+            .findByIdAndUpdate(
+                id,
+                {
+                    $set: {
+                        status: ServiceRequestStatus.CANCELLED,
+                        cancellationReason: reason || 'Cancelled by user',
+                    },
+                },
+                { new: true }
+            )
+            .lean();
+
+        // Notify all notified providers using NotificationService
+        const providerIds = request.allNotifiedProviders.map((pid) => pid.toString());
+        await this.notificationService.notifyProvidersClosed(providerIds, id, 'cancelled');
+
+        return updatedRequest;
+    }
+
+    async findById(id: string): Promise<ServiceRequest> {
+        const request = await this.serviceRequestModel
+            .findById(id)
+            .populate('seekerId', 'name phone email profilePicture')
+            .populate('categoryId', 'name icon')
+            .populate('subCategoryId', 'name')
+            .populate('acceptedProviderId', 'name phone profilePicture')
+            .populate('acceptedListingId', 'title price unitOfMeasure')
+            .populate('serviceAddressId')
+            .lean();
+
+        if (!request) {
+            throw new NotFoundException('Service request not found');
+        }
+
+        // Add formatted address string from serviceAddressId
+        if (request.serviceAddressId && typeof request.serviceAddressId === 'object') {
+            const addr = request.serviceAddressId as any;
+            request.address = [addr.addressLine1, addr.addressLine2, addr.village, addr.district, addr.state, addr.pincode].filter(Boolean).join(', ');
+        }
+
+        return request;
+    }
+
+    async findAll(filters: {
+        status?: ServiceRequestStatus;
+        categoryId?: string;
+        seekerId?: string;
+        page?: number;
+        limit?: number;
+    }): Promise<{ requests: ServiceRequest[]; total: number }> {
+        const query: any = {};
+        const page = filters.page || 1;
+        const limit = filters.limit || 20;
+        const skip = (page - 1) * limit;
+
+        if (filters.status) {
+            query.status = filters.status;
+        }
+
+        if (filters.categoryId) {
+            query.categoryId = new Types.ObjectId(filters.categoryId);
+        }
+
+        if (filters.seekerId) {
+            query.seekerId = new Types.ObjectId(filters.seekerId);
+        }
+
+        const [requests, total] = await Promise.all([
+            this.serviceRequestModel
+                .find(query)
+                .populate('seekerId', 'name phone email')
+                .populate('categoryId', 'name icon')
+                .populate('subCategoryId', 'name')
+                .populate('serviceAddressId')
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+            this.serviceRequestModel.countDocuments(query),
+        ]);
+
+        // Add formatted address strings
+        const requestsWithAddresses = requests.map((request) => {
+            if (request.serviceAddressId && typeof request.serviceAddressId === 'object') {
+                const addr = request.serviceAddressId as any;
+                request.address = [addr.addressLine1, addr.addressLine2, addr.village, addr.district, addr.state, addr.pincode].filter(Boolean).join(', ');
+            }
+            return request;
+        });
+
+        return { requests: requestsWithAddresses, total };
+    }
+
+    async decline(requestId: string, providerId: string, reason?: string): Promise<void> {
+        const request = await this.serviceRequestModel.findById(requestId);
+
+        if (!request) {
+            throw new NotFoundException('Service request not found');
+        }
+
+        if (!request.allNotifiedProviders.some((pid) => pid.toString() === providerId)) {
+            throw new ForbiddenException('You were not notified about this request');
+        }
+
+        // Add to declined providers list
+        if (!request.declinedProviders.some((pid) => pid.toString() === providerId)) {
+            request.declinedProviders.push(new Types.ObjectId(providerId));
+            await request.save();
+        }
+
+        this.logger.log(`Provider ${providerId} declined request ${requestId}`);
+    }
+}
