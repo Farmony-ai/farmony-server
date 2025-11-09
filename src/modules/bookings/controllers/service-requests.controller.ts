@@ -2,13 +2,13 @@ import { Controller, Get, Post, Body, Param, Patch, UseGuards, Request, Query, H
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ServiceRequestsService } from '../services/service-requests.service';
 import { CreateServiceRequestDto, UpdateServiceRequestDto, AcceptServiceRequestDto, DeclineServiceRequestDto, ServiceRequestFiltersDto } from './dto';
-import { JwtAuthGuard } from '../identity/auth/guards/jwt-auth.guard';
+import { FirebaseAuthGuard } from '@identity/guards/firebase-auth.guard';
 import { FirebaseStorageService } from '../../common/firebase/firebase-storage.service';
 import { ApiTags, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
 
 @ApiTags('Service Requests')
 @Controller('service-requests')
-@UseGuards(JwtAuthGuard)
+@UseGuards(FirebaseAuthGuard)
 export class ServiceRequestsController {
     constructor(private readonly serviceRequestsService: ServiceRequestsService, private readonly storageService: FirebaseStorageService) {}
 
@@ -18,7 +18,7 @@ export class ServiceRequestsController {
     @ApiOperation({ summary: 'Create a new service request' })
     @ApiConsumes('multipart/form-data')
     async create(@UploadedFiles() files: Express.Multer.File[], @Body() createDto: CreateServiceRequestDto, @Request() req) {
-        const seekerId = req.user.sub || req.user.userId;
+        const seekerId = req.user.uid || req.user.sub || req.user.userId;
 
         // Handle file uploads if any
         let attachmentKeys = [];
@@ -39,7 +39,7 @@ export class ServiceRequestsController {
     @Get('my-requests')
     @ApiOperation({ summary: "Get seeker's own service requests" })
     async findMyRequests(@Request() req, @Query() filters: ServiceRequestFiltersDto) {
-        const seekerId = req.user.sub || req.user.userId;
+        const seekerId = req.user.uid || req.user.sub || req.user.userId;
         return this.serviceRequestsService.findAll({
             ...filters,
             seekerId,
@@ -49,7 +49,7 @@ export class ServiceRequestsController {
     @Get('available')
     @ApiOperation({ summary: 'Get available service requests for a provider' })
     async findAvailableForProvider(@Request() req, @Query() filters: ServiceRequestFiltersDto) {
-        const providerId = req.user.sub || req.user.userId;
+        const providerId = req.user.uid || req.user.sub || req.user.userId;
 
         // This will return only requests where the provider was notified
         // The service will handle the filtering based on notification waves
@@ -71,7 +71,7 @@ export class ServiceRequestsController {
     @Get(':id')
     @ApiOperation({ summary: 'Get a specific service request by ID' })
     async findOne(@Param('id') id: string, @Request() req) {
-        const userId = req.user.sub || req.user.userId;
+        const userId = req.user.uid || req.user.sub || req.user.userId;
         const request = await this.serviceRequestsService.findById(id);
 
         // Check if user has access to view this request
@@ -93,7 +93,7 @@ export class ServiceRequestsController {
     @Patch(':id')
     @ApiOperation({ summary: 'Update a service request (seeker only)' })
     async update(@Param('id') id: string, @Body() updateDto: UpdateServiceRequestDto, @Request() req) {
-        const userId = req.user.sub || req.user.userId;
+        const userId = req.user.uid || req.user.sub || req.user.userId;
         return this.serviceRequestsService.update(id, updateDto, userId);
     }
 
@@ -101,7 +101,7 @@ export class ServiceRequestsController {
     @HttpCode(HttpStatus.OK)
     @ApiOperation({ summary: 'Accept a service request (provider only)' })
     async accept(@Param('id') id: string, @Body() acceptDto: AcceptServiceRequestDto, @Request() req) {
-        const providerId = req.user.sub || req.user.userId;
+        const providerId = req.user.uid || req.user.sub || req.user.userId;
         return this.serviceRequestsService.accept(id, providerId, acceptDto);
     }
 
@@ -109,7 +109,7 @@ export class ServiceRequestsController {
     @HttpCode(HttpStatus.OK)
     @ApiOperation({ summary: 'Decline a service request (provider only)' })
     async decline(@Param('id') id: string, @Body() declineDto: DeclineServiceRequestDto, @Request() req) {
-        const providerId = req.user.sub || req.user.userId;
+        const providerId = req.user.uid || req.user.sub || req.user.userId;
         await this.serviceRequestsService.decline(id, providerId, declineDto.reason);
         return {
             message: 'Service request declined successfully',
@@ -120,7 +120,7 @@ export class ServiceRequestsController {
     @HttpCode(HttpStatus.OK)
     @ApiOperation({ summary: 'Cancel a service request (seeker only)' })
     async cancel(@Param('id') id: string, @Body('reason') reason: string, @Request() req) {
-        const userId = req.user.sub || req.user.userId;
+        const userId = req.user.uid || req.user.sub || req.user.userId;
         return this.serviceRequestsService.cancel(id, userId, reason);
     }
 

@@ -1,12 +1,12 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
 import { ProvidersService } from './providers.service';
-import { UpdatePreferencesDto } from '../../identity/dto/update-preferences.dto';
-import { AuthGuard } from '@nestjs/passport';
+import { UpdatePreferencesDto } from '@identity/dto/update-preferences.dto';
+import { FirebaseAuthGuard } from '@identity/guards/firebase-auth.guard';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 
 @ApiTags('Providers')
 @Controller('providers')
-@UseGuards(AuthGuard('jwt'))
+@UseGuards(FirebaseAuthGuard)
 export class ProvidersController {
     constructor(private readonly providersService: ProvidersService) {}
 
@@ -61,7 +61,7 @@ export class ProvidersController {
     @Patch('preferences')
     @ApiOperation({ summary: 'Update provider preferences' })
     updatePreferences(@Request() req, @Body() dto: UpdatePreferencesDto) {
-        const userId = req.user.userId || req.user.sub;
+        const userId = req.user.uid || req.user.userId || req.user.sub;
         return this.providersService.updateUserPreferences(userId, dto);
     }
 }

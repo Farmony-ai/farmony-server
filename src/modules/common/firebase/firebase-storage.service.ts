@@ -1,12 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { v4 as uuid } from 'uuid';
 import { FirebaseAdminService } from './firebase-admin.service';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class FirebaseStorageService {
     private readonly logger = new Logger(FirebaseStorageService.name);
+    private readonly makePublicByDefault: boolean;
+    private readonly useSignedUrls: boolean;
 
-    constructor(private readonly firebaseAdmin: FirebaseAdminService) {}
+    constructor(private readonly firebaseAdmin: FirebaseAdminService, private readonly config: ConfigService) {
+        this.makePublicByDefault = (this.config.get<string>('FIREBASE_STORAGE_MAKE_PUBLIC') ?? 'true').toLowerCase() === 'true';
+        this.useSignedUrls = (this.config.get<string>('FIREBASE_STORAGE_SIGNED_URLS') ?? 'false').toLowerCase() === 'true';
+    }
 
     async uploadFile(file: Express.Multer.File, folder = 'uploads'): Promise<string> {
         if (!file) {
@@ -23,6 +29,7 @@ export class FirebaseStorageService {
             buffer: file.buffer,
             destination: key,
             contentType: file.mimetype,
+            makePublic: this.makePublicByDefault,
         });
 
         return key;
@@ -59,5 +66,20 @@ export class FirebaseStorageService {
 
     getPublicUrls(keys: (string | null | undefined)[] = []): string[] {
         return keys.map((key) => this.getPublicUrl(key) || '').filter((url) => !!url);
+    }
+
+    /**
+     * Get an access URL for a file. Uses signed URLs if configured, otherwise public URL.
+     */
+    async getAccessUrl(key: string): Promise<string | null> {
+        if (!key) return null;
+        if (this.useSignedUrls || !this.makePublicByDefault) {
+            try {
+                return await this.firebaseAdmin.getSignedUrl(key);
+            } catch (err) {
+                this.logger.warn(`Failed to generate signed URL for ${key}, falling back to public URL.`);
+            }
+        }
+        return this.getPublicUrl(key);
     }
 }

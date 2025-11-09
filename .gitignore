@@ -4,3 +4,4 @@ dist/
 .env.prod
 .env
 .DS_Store
+config/

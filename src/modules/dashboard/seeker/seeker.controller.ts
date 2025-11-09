@@ -1,16 +1,16 @@
 import { Controller, Get, Param, UseGuards, Request, UnauthorizedException } from '@nestjs/common';
 import { SeekerService } from './seeker.service';
-import { JwtAuthGuard } from '../identity/auth/guards/jwt-auth.guard';
+import { FirebaseAuthGuard } from '@identity/guards/firebase-auth.guard';
 
 @Controller('seeker')
-@UseGuards(JwtAuthGuard)
+@UseGuards(FirebaseAuthGuard)
 export class SeekerController {
     constructor(private readonly seekerService: SeekerService) {}
 
     @Get(':seekerId/bookings')
     async getUnifiedBookings(@Param('seekerId') seekerId: string, @Request() req) {
         // Verify the user is accessing their own bookings
-        if (req.user.userId !== seekerId && req.user.role !== 'admin') {
+        if ((req.user.uid || req.user.userId) !== seekerId && req.user.role !== 'admin') {
             throw new UnauthorizedException('Unauthorized access to bookings');
         }
 

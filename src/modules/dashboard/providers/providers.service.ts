@@ -4,10 +4,10 @@ import { OrdersService } from '../../bookings/services/orders.service';
 import { ListingsService } from '../../bookings/services/listings/listings.service';
 import { RatingsService } from '../ratings/ratings.service';
 import { Types } from 'mongoose';
-import { UsersService } from '../../identity/users.service';
+import { UsersService } from '@identity/services/users.service';
 import { ServiceRequestsService } from '../../bookings/services/service-requests.service';
 import { OrderStatus } from '../../bookings/orders/dto/create-order.dto';
-import { UpdatePreferencesDto } from '../users/dto/update-preferences.dto';
+import { UpdatePreferencesDto } from '@identity/dto/update-preferences.dto';
 
 @Injectable()
 export class ProvidersService {

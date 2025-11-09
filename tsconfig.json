@@ -10,6 +10,12 @@
     "sourceMap": true,
     "outDir": "./dist",
     "baseUrl": "./",
+    "paths": {
+      "@identity/*": ["src/modules/identity/*"],
+      "@common/*": ["src/modules/common/*"],
+      "@bookings/*": ["src/modules/bookings/*"],
+      "@dashboard/*": ["src/modules/dashboard/*"]
+    },
     "incremental": true,
     "skipLibCheck": true,
     "strictNullChecks": false,
