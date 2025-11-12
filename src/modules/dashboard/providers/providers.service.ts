@@ -1,12 +1,10 @@
 // src/modules/providers/providers.service.ts
 import { Injectable, Inject, forwardRef } from '@nestjs/common';
-import { OrdersService } from '../../bookings/services/orders.service';
-import { ListingsService } from '../../bookings/services/listings/listings.service';
-import { RatingsService } from '../ratings/ratings.service';
+import { OrdersService } from '@transactions/service-requests/services/orders.service';
+import { ListingsService } from '@marketplace/listings/services/listings.service';
 import { Types } from 'mongoose';
 import { UsersService } from '@identity/services/users.service';
-import { ServiceRequestsService } from '../../bookings/services/service-requests.service';
-import { OrderStatus } from '../../bookings/orders/dto/create-order.dto';
+import { ServiceRequestsService } from '@transactions/service-requests/services/service-requests.service';
 import { UpdatePreferencesDto } from '@identity/dto/update-preferences.dto';
 
 @Injectable()
@@ -14,7 +12,6 @@ export class ProvidersService {
     constructor(
         private readonly ordersService: OrdersService,
         private readonly listingsService: ListingsService,
-        private readonly ratingsService: RatingsService,
         private readonly usersService: UsersService,
         @Inject(forwardRef(() => ServiceRequestsService))
         private readonly serviceRequestsService: ServiceRequestsService
@@ -44,8 +41,9 @@ export class ProvidersService {
             const activeListings = listings.filter((l) => l.isActive).length;
 
             // Get average rating
-            const ratings = await this.ratingsService.findByUser(providerId);
-            const avgRating = ratings.length > 0 ? ratings.reduce((sum, r) => sum + r.score, 0) / ratings.length : 0;
+            // TODO: Ratings will be implemented in engagement/ratings module
+            const ratings = [];
+            const avgRating = 0;
 
             // Get all bookings/orders
             const allBookings = await this.ordersService.findByProvider(providerId);
@@ -243,20 +241,9 @@ export class ProvidersService {
     }
 
     private async getBookingsNeedingReview(providerId: string, bookings: any[]) {
-        const toReview = [];
-
-        for (const booking of bookings) {
-            if (booking.status === 'completed') {
-                const ratings = await this.ratingsService.findByOrder(booking._id.toString());
-                const hasProviderRated = ratings.some((r) => r.raterId.toString() === providerId);
-
-                if (!hasProviderRated) {
-                    toReview.push(booking);
-                }
-            }
-        }
-
-        return toReview;
+        // TODO: Ratings will be implemented in engagement/ratings module
+        // For now, return empty array
+        return [];
     }
 
     async updateUserPreferences(userId: string, dto: UpdatePreferencesDto) {

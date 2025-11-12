@@ -295,4 +295,161 @@ export class FirebaseAdminService implements OnModuleInit {
         }
         return this.firebaseApp.auth();
     }
+
+    /**
+     * Get Firebase Messaging instance
+     */
+    getMessaging(): admin.messaging.Messaging {
+        if (!this.firebaseApp) {
+            this.initializeFirebase();
+        }
+        return this.firebaseApp.messaging();
+    }
+
+    /**
+     * Send FCM notification to a single device token
+     * @param token - FCM device token
+     * @param notification - Notification payload
+     * @param data - Optional data payload
+     * @returns Message ID if successful
+     */
+    async sendNotification(
+        token: string,
+        notification: { title: string; body: string; imageUrl?: string },
+        data?: Record<string, string>
+    ): Promise<string | null> {
+        if (!this.firebaseApp) {
+            this.logger.warn('Firebase not initialized - cannot send notification');
+            return null;
+        }
+
+        try {
+            const message: admin.messaging.Message = {
+                token,
+                notification,
+                data,
+                android: {
+                    priority: 'high',
+                },
+                apns: {
+                    payload: {
+                        aps: {
+                            sound: 'default',
+                            badge: 1,
+                        },
+                    },
+                },
+            };
+
+            const response = await this.getMessaging().send(message);
+            this.logger.log(`Notification sent successfully: ${response}`);
+            return response;
+        } catch (error) {
+            this.logger.error(`Failed to send notification to token ${token}:`, error);
+            return null;
+        }
+    }
+
+    /**
+     * Send FCM notification to multiple device tokens
+     * @param tokens - Array of FCM device tokens
+     * @param notification - Notification payload
+     * @param data - Optional data payload
+     * @returns Batch response with success/failure details
+     */
+    async sendMulticastNotification(
+        tokens: string[],
+        notification: { title: string; body: string; imageUrl?: string },
+        data?: Record<string, string>
+    ): Promise<admin.messaging.BatchResponse | null> {
+        if (!this.firebaseApp) {
+            this.logger.warn('Firebase not initialized - cannot send notifications');
+            return null;
+        }
+
+        if (!tokens || tokens.length === 0) {
+            this.logger.warn('No tokens provided - cannot send notifications');
+            return null;
+        }
+
+        try {
+            const message: admin.messaging.MulticastMessage = {
+                tokens,
+                notification,
+                data,
+                android: {
+                    priority: 'high',
+                },
+                apns: {
+                    payload: {
+                        aps: {
+                            sound: 'default',
+                            badge: 1,
+                        },
+                    },
+                },
+            };
+
+            const response = await this.getMessaging().sendEachForMulticast(message);
+            this.logger.log(`Notifications sent: ${response.successCount} successful, ${response.failureCount} failed`);
+
+            // Log failed tokens for debugging
+            if (response.failureCount > 0) {
+                response.responses.forEach((resp, idx) => {
+                    if (!resp.success) {
+                        this.logger.error(`Failed to send to token ${tokens[idx]}: ${resp.error?.message}`);
+                    }
+                });
+            }
+
+            return response;
+        } catch (error) {
+            this.logger.error('Failed to send multicast notification:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Send notification to a topic
+     * @param topic - Topic name (e.g., 'all-providers', 'region-north')
+     * @param notification - Notification payload
+     * @param data - Optional data payload
+     * @returns Message ID if successful
+     */
+    async sendToTopic(
+        topic: string,
+        notification: { title: string; body: string; imageUrl?: string },
+        data?: Record<string, string>
+    ): Promise<string | null> {
+        if (!this.firebaseApp) {
+            this.logger.warn('Firebase not initialized - cannot send notification');
+            return null;
+        }
+
+        try {
+            const message: admin.messaging.Message = {
+                topic,
+                notification,
+                data,
+                android: {
+                    priority: 'high',
+                },
+                apns: {
+                    payload: {
+                        aps: {
+                            sound: 'default',
+                            badge: 1,
+                        },
+                    },
+                },
+            };
+
+            const response = await this.getMessaging().send(message);
+            this.logger.log(`Notification sent to topic ${topic}: ${response}`);
+            return response;
+        } catch (error) {
+            this.logger.error(`Failed to send notification to topic ${topic}:`, error);
+            return null;
+        }
+    }
 }

@@ -3,6 +3,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { UsersService } from '../services/users.service';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import { UpdatePreferencesDto } from '../dto/update-preferences.dto';
+import { CurrentUser } from '../decorators/current-user.decorator';
 import { ApiTags, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { memoryStorage } from 'multer';
 
@@ -196,5 +197,33 @@ export class UsersController {
             const message = error instanceof Error ? error.message : 'Unknown error';
             throw new BadRequestException(`Failed to delete profile picture: ${message}`);
         }
+    }
+
+    @Post('fcm-token')
+    @ApiOperation({ summary: 'Register FCM device token for push notifications' })
+    async registerFcmToken(@Body('token') token: string, @CurrentUser() user: any) {
+        if (!token) {
+            throw new BadRequestException('Token is required');
+        }
+
+        await this.usersService.registerFcmToken(user.userId, token);
+
+        return {
+            message: 'FCM token registered successfully',
+        };
+    }
+
+    @Delete('fcm-token')
+    @ApiOperation({ summary: 'Remove FCM device token' })
+    async removeFcmToken(@Body('token') token: string, @CurrentUser() user: any) {
+        if (!token) {
+            throw new BadRequestException('Token is required');
+        }
+
+        await this.usersService.removeFcmToken(user.userId, token);
+
+        return {
+            message: 'FCM token removed successfully',
+        };
     }
 }

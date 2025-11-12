@@ -21,14 +21,30 @@ export class UserPreferences {
 
 const UserPreferencesSchema = SchemaFactory.createForClass(UserPreferences);
 
+/**
+ * Address type enum for categorizing addresses
+ * Used across the platform for user addresses, listing locations, etc.
+ */
+export enum AddressType {
+    HOME = 'home',
+    WORK = 'work',
+    PERSONAL = 'personal',
+    OTHER = 'other',
+    FARM = 'farm',
+    WAREHOUSE = 'warehouse',
+    SERVICE_AREA = 'service_area',
+    DELIVERY_POINT = 'delivery_point',
+    MEETING_SPOT = 'meeting_spot'
+}
+
 @Schema({ _id: true, timestamps: true })
 export class Address {
     @Prop({
         type: String,
-        enum: ['home', 'work', 'personal', 'other', 'farm', 'warehouse', 'service_area', 'delivery_point', 'meeting_spot'],
+        enum: Object.values(AddressType),
         required: true,
     })
-    addressType: string;
+    addressType: AddressType;
 
     @Prop({ type: String })
     customLabel?: string;
@@ -54,7 +70,7 @@ export class Address {
     @Prop({ type: String })
     pincode?: string;
 
-    @Prop({ type: pointDefinition, index: '2dsphere' })
+    @Prop({ type: pointDefinition })
     location?: { type: 'Point'; coordinates: [number, number] };
 
     @Prop({ type: Number })
@@ -83,6 +99,8 @@ export class Address {
 }
 
 const AddressSchema = SchemaFactory.createForClass(Address);
+// Add geospatial index for location field
+AddressSchema.index({ location: '2dsphere' });
 
 @Schema({ _id: false })
 export class RatingSummary {
@@ -166,6 +184,9 @@ export class User {
 
     @Prop({ type: [RecentRatingSchema], default: [] })
     recentRatings: RecentRating[];
+
+    @Prop({ type: [String], default: [] })
+    fcmTokens: string[];
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

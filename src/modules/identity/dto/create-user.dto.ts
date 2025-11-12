@@ -8,6 +8,6 @@ export class CreateUserDto {
     @IsOptional()
     email: string;
 
-    @IsPhoneNumber('ZZ')
+    @IsPhoneNumber(null) // Accept any country code
     phone: string;
 }

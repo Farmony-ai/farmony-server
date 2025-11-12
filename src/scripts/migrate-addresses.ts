@@ -1,21 +1,44 @@
 // scripts/migrate-addresses.ts
-// Run this script to migrate existing listings and service requests to use addresses
+// DEPRECATED: This script was designed for a separate Address collection
+// Addresses are now embedded in User documents (users.addresses array)
+// This script needs significant refactoring to work with the new embedded structure
+// DO NOT RUN without updating the logic to handle embedded addresses
+
+// TODO: Update this script to:
+// 1. Work with embedded User.addresses array instead of separate Address collection
+// 2. Update User.defaultAddressId references to point to embedded address IDs
+// 3. Handle the fact that Address is no longer a top-level collection
 
 import { connect, model } from 'mongoose';
 import * as path from 'path';
 import { config as loadEnv } from 'dotenv';
-import { ListingSchema } from '../modules/bookings/services/listings/listings.schema';
-import { AddressSchema } from '../modules/addresses/addresses.schema';
-import { UserSchema } from '../modules/users/users.schema';
-import { ServiceRequestSchema } from '../modules/bookings/schemas/service-request.entity';
-import { AddressType } from '../common/interfaces/address.interface';
+import { ListingSchema } from '../modules/marketplace/listings/schemas/listings.schema';
+import { UserSchema } from '../modules/identity/schemas/users.schema';
+import { ServiceRequestSchema } from '../modules/transactions/service-requests/schemas/service-request.entity';
 
 const Listing = model('Listing', ListingSchema);
-const Address = model('Address', AddressSchema);
 const User = model('User', UserSchema);
 const ServiceRequest = model('ServiceRequest', ServiceRequestSchema);
 
+// NOTE: Script is deprecated and needs refactoring for embedded addresses
+// Commenting out entire script to allow compilation
+throw new Error('This script is deprecated - addresses are now embedded in User documents. See comments at top of file.');
+
+/* DEPRECATED CODE - DO NOT USE
 const NEAR_DISTANCE_METERS = 25;
+
+// Address types from the embedded Address schema in User
+enum AddressType {
+    HOME = 'home',
+    WORK = 'work',
+    PERSONAL = 'personal',
+    OTHER = 'other',
+    FARM = 'farm',
+    WAREHOUSE = 'warehouse',
+    SERVICE_AREA = 'service_area',
+    DELIVERY_POINT = 'delivery_point',
+    MEETING_SPOT = 'meeting_spot'
+}
 
 function isValidCoordinates(value: any): value is [number, number] {
     return Array.isArray(value) && value.length === 2 && typeof value[0] === 'number' && typeof value[1] === 'number' && !Number.isNaN(value[0]) && !Number.isNaN(value[1]);
@@ -48,31 +71,36 @@ async function ensureAddressGeo(address: any, coordinates: [number, number]) {
 
 async function findExistingAddress(userId: any, coordinates: [number, number]): Promise<any | null> {
     try {
-        const geoMatch = await Address.findOne({
-            userId,
-            location: {
-                $near: {
-                    $geometry: { type: 'Point', coordinates },
-                    $maxDistance: NEAR_DISTANCE_METERS,
-                },
-            },
-        });
-
-        if (geoMatch) {
-            await ensureAddressGeo(geoMatch, coordinates);
-            return geoMatch;
+        // NOTE: Addresses are now embedded in User documents
+        // This function needs to be updated to work with the new embedded address structure
+        // For now, we'll look for addresses within the user's addresses array
+        const user = await User.findById(userId);
+        if (!user || !user.addresses || user.addresses.length === 0) {
+            return null;
         }
+
+        // Find matching address in the embedded addresses array
+        for (const addr of user.addresses) {
+            if (addr.location && addr.location.coordinates) {
+                const [lng, lat] = addr.location.coordinates;
+                const [targetLng, targetLat] = coordinates;
+
+                // Simple distance check (approximate)
+                const distance = Math.sqrt(
+                    Math.pow(lng - targetLng, 2) + Math.pow(lat - targetLat, 2)
+                ) * 111000; // rough conversion to meters
+
+                if (distance < NEAR_DISTANCE_METERS) {
+                    return addr;
+                }
+            }
+        }
+
+        return null;
     } catch (error) {
-        console.warn(`Geo lookup failed for user ${userId}: ${(error as Error).message}`);
+        console.warn(`Address lookup failed for user ${userId}: ${(error as Error).message}`);
+        return null;
     }
-
-    const legacyMatch = await Address.findOne({ userId, coordinates });
-    if (legacyMatch) {
-        await ensureAddressGeo(legacyMatch, coordinates);
-        return legacyMatch;
-    }
-
-    return null;
 }
 
 async function migrateAddresses() {
@@ -345,10 +373,12 @@ async function migrateAddresses() {
 }
 
 // Run the migration
-migrateAddresses().catch((error) => {
-    console.error('Migration failed:', error);
-    process.exit(1);
-});
+// COMMENTED OUT - Script is deprecated
+// migrateAddresses().catch((error) => {
+//     console.error('Migration failed:', error);
+//     process.exit(1);
+// });
+END OF DEPRECATED CODE */
 
 // ============================================
 // package.json script to run migration:

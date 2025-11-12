@@ -155,4 +155,88 @@ export class UsersService {
         user.profilePicture = undefined;
         return user.save();
     }
+
+    /**
+     * Register FCM device token for push notifications
+     * @param userId - User ID
+     * @param token - FCM device token
+     * @returns Updated user document
+     */
+    async registerFcmToken(userId: string, token: string): Promise<UserDocument> {
+        if (!token) {
+            throw new BadRequestException('FCM token is required');
+        }
+
+        // Add token to user's fcmTokens array if not already present
+        const user = await this.userModel.findByIdAndUpdate(
+            userId,
+            { $addToSet: { fcmTokens: token } },
+            { new: true }
+        ).exec();
+
+        if (!user) {
+            throw new NotFoundException(`User ${userId} not found`);
+        }
+
+        return user;
+    }
+
+    /**
+     * Remove FCM device token (e.g., on logout or token expiry)
+     * @param userId - User ID
+     * @param token - FCM device token to remove
+     * @returns Updated user document
+     */
+    async removeFcmToken(userId: string, token: string): Promise<UserDocument> {
+        if (!token) {
+            throw new BadRequestException('FCM token is required');
+        }
+
+        const user = await this.userModel.findByIdAndUpdate(
+            userId,
+            { $pull: { fcmTokens: token } },
+            { new: true }
+        ).exec();
+
+        if (!user) {
+            throw new NotFoundException(`User ${userId} not found`);
+        }
+
+        return user;
+    }
+
+    /**
+     * Get all FCM tokens for a user
+     * @param userId - User ID
+     * @returns Array of FCM tokens
+     */
+    async getFcmTokens(userId: string): Promise<string[]> {
+        const user = await this.userModel.findById(userId).select('fcmTokens').lean().exec();
+
+        if (!user) {
+            throw new NotFoundException(`User ${userId} not found`);
+        }
+
+        return user.fcmTokens || [];
+    }
+
+    /**
+     * Get FCM tokens for multiple users
+     * @param userIds - Array of user IDs
+     * @returns Map of userId -> tokens[]
+     */
+    async getFcmTokensForUsers(userIds: string[]): Promise<Map<string, string[]>> {
+        const users = await this.userModel
+            .find({ _id: { $in: userIds.map(id => new Types.ObjectId(id)) } })
+            .select('_id fcmTokens')
+            .lean()
+            .exec();
+
+        const tokenMap = new Map<string, string[]>();
+        users.forEach(user => {
+            tokenMap.set(user._id.toString(), user.fcmTokens || []);
+        });
+
+        return tokenMap;
+    }
 }

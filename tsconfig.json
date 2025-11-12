@@ -14,7 +14,10 @@
       "@identity/*": ["src/modules/identity/*"],
       "@common/*": ["src/modules/common/*"],
       "@bookings/*": ["src/modules/bookings/*"],
-      "@dashboard/*": ["src/modules/dashboard/*"]
+      "@dashboard/*": ["src/modules/dashboard/*"],
+      "@marketplace/*": ["src/modules/marketplace/*"],
+      "@transactions/*": ["src/modules/transactions/*"],
+      "@engagement/*": ["src/modules/engagement/*"]
     },
     "incremental": true,
     "skipLibCheck": true,

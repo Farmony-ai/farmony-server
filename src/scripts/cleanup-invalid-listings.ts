@@ -3,7 +3,7 @@
 
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../app.module';
-import { ListingsService } from '../modules/bookings/services/listings/listings.service';
+import { ListingsService } from '../modules/marketplace/listings/services/listings.service';
 
 async function bootstrap() {
     const app = await NestFactory.createApplicationContext(AppModule);

@@ -2,23 +2,13 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
-import { UsersModule } from './modules/users/users.module';
+import { IdentityModule } from './modules/identity/identity.module';
 import { CommonModule } from './modules/common/common.module';
-import { KycModule } from './modules/kyc/kyc.module';
-import { ListingsModule } from './modules/bookings/services/listings/listings.module';
-import { OrdersModule } from './modules/bookings/orders/orders.module';
-import { EscrowModule } from './modules/escrow/escrow.module';
-import { RatingsModule } from './modules/ratings/ratings.module';
-import { CommissionsModule } from './modules/commissions/commissions.module';
-import { AddressesModule } from './modules/addresses/addresses.module';
+import { MarketplaceModule } from './modules/marketplace/marketplace.module';
+import { TransactionsModule } from './modules/transactions/transactions.module';
+import { EngagementModule } from './modules/engagement/engagement.module';
 import { ProvidersModule } from './modules/dashboard/providers/providers.module';
-import { ChatModule } from './modules/chat/chat.module';
-import { MessagesModule } from './modules/messages/messages.module';
-import { DisputesModule } from './modules/disputes/disputes.module';
 import databaseConfig from './modules/common/config/database.config';
-import { MatchesModule } from './modules/bookings/matches/matches.module';
-import { ServiceRequestsModule } from './modules/bookings/service-requests/service-requests.module';
-import { SeekerModule } from './modules/seeker/seeker.module';
 
 @Module({
     imports: [
@@ -35,22 +25,12 @@ import { SeekerModule } from './modules/seeker/seeker.module';
             }),
         }),
         // ScheduleModule.forRoot(), // For cron jobs
-        CommonModule, // Provides Auth, AWS, and shared services
-        UsersModule,
-        KycModule,
-        ListingsModule,
-        OrdersModule,
-        EscrowModule,
-        CommissionsModule,
-        RatingsModule,
-        AddressesModule,
-        ProvidersModule,
-        ChatModule,
-        MessagesModule,
-        DisputesModule,
-        MatchesModule,
-        ServiceRequestsModule,
-        SeekerModule,
+        CommonModule, // Provides Firebase, Storage, and stub services
+        IdentityModule, // Users and authentication
+        MarketplaceModule, // Listings, Matches, Catalogue
+        TransactionsModule, // Service Requests, Orders
+        EngagementModule, // Notifications
+        ProvidersModule, // Dashboard - Provider view
     ],
 })
 export class AppModule {}

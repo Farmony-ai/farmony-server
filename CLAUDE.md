@@ -260,3 +260,10 @@ See `docs/01-project-scope.md` Section 3 for excluded features:
 - Business analytics and reporting
 
 These are intentionally excluded from MVP but the architecture supports adding them later.
+
+## Active Technologies
+- TypeScript 4.9 / Node.js 18+ / NestJS 9.x + NestJS Framework, Mongoose ODM, Firebase Admin SDK, class-validator (feat/FAR-9)
+- MongoDB with Mongoose schemas (feat/FAR-9)
+
+## Recent Changes
+- feat/FAR-9: Added TypeScript 4.9 / Node.js 18+ / NestJS 9.x + NestJS Framework, Mongoose ODM, Firebase Admin SDK, class-validator

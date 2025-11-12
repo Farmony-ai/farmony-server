@@ -3,5 +3,14 @@ dist/
 .env.dev
 .env.prod
 .env
+.env.*
 .DS_Store
 config/
+*.log
+build/
+*.tmp
+*.swp
+.vscode/
+.idea/
+coverage/
+Thumbs.db
