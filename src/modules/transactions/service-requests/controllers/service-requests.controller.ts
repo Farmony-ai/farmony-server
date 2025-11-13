@@ -4,7 +4,9 @@ import { ServiceRequestsService } from '../services/service-requests.service';
 import { CreateServiceRequestDto, UpdateServiceRequestDto, AcceptServiceRequestDto, DeclineServiceRequestDto, ServiceRequestFiltersDto } from '../dto';
 import { FirebaseAuthGuard } from '@identity/guards/firebase-auth.guard';
 import { FirebaseStorageService } from '@common/firebase/firebase-storage.service';
-import { ApiTags, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiConsumes, ApiBody, ApiOkResponse, ApiCreatedResponse } from '@nestjs/swagger';
+import { ServiceRequestStatusDto } from '../dto/service-request-status.dto';
+import { AcceptServiceRequestResponseDto, PaginatedServiceRequestsDto, ServiceRequestResponseDto } from '../dto/service-request-response.dto';
 
 @ApiTags('Service Requests')
 @Controller('service-requests')
@@ -17,6 +19,7 @@ export class ServiceRequestsController {
     @HttpCode(HttpStatus.CREATED)
     @ApiOperation({ summary: 'Create a new service request' })
     @ApiConsumes('multipart/form-data')
+    @ApiCreatedResponse({ type: ServiceRequestResponseDto })
     async create(@UploadedFiles() files: Express.Multer.File[], @Body() createDto: CreateServiceRequestDto, @Request() req) {
         const seekerId = req.user.uid || req.user.sub || req.user.userId;
 
@@ -32,12 +35,14 @@ export class ServiceRequestsController {
 
     @Get()
     @ApiOperation({ summary: 'Get all service requests with filters' })
+    @ApiOkResponse({ type: PaginatedServiceRequestsDto })
     async findAll(@Query() filters: ServiceRequestFiltersDto) {
         return this.serviceRequestsService.findAll(filters);
     }
 
     @Get('my-requests')
     @ApiOperation({ summary: "Get seeker's own service requests" })
+    @ApiOkResponse({ type: PaginatedServiceRequestsDto })
     async findMyRequests(@Request() req, @Query() filters: ServiceRequestFiltersDto) {
         const seekerId = req.user.uid || req.user.sub || req.user.userId;
         return this.serviceRequestsService.findAll({
@@ -48,6 +53,7 @@ export class ServiceRequestsController {
 
     @Get('available')
     @ApiOperation({ summary: 'Get available service requests for a provider' })
+    @ApiOkResponse({ type: PaginatedServiceRequestsDto })
     async findAvailableForProvider(@Request() req, @Query() filters: ServiceRequestFiltersDto) {
         const providerId = req.user.uid || req.user.sub || req.user.userId;
 
@@ -60,7 +66,8 @@ export class ServiceRequestsController {
         });
 
         // Filter to only show requests where this provider was notified
-        const providerRequests = availableRequests.requests.filter((request: any) => request.allNotifiedProviders?.some((pid: any) => pid.toString() === providerId));
+        const providerRequests = availableRequests.requests.filter((request: any) => (request.lifecycle?.matching?.allNotifiedProviders || [])
+            .some((pid: any) => pid.toString() === providerId));
 
         return {
             requests: providerRequests,
@@ -70,13 +77,14 @@ export class ServiceRequestsController {
 
     @Get(':id')
     @ApiOperation({ summary: 'Get a specific service request by ID' })
+    @ApiOkResponse({ type: ServiceRequestResponseDto })
     async findOne(@Param('id') id: string, @Request() req) {
         const userId = req.user.uid || req.user.sub || req.user.userId;
         const request = await this.serviceRequestsService.findById(id);
 
         // Check if user has access to view this request
         const isSeeker = request.seekerId.toString() === userId;
-        const isNotifiedProvider = (request as any).allNotifiedProviders?.some((pid: any) => pid.toString() === userId);
+        const isNotifiedProvider = (request as any).lifecycle?.matching?.allNotifiedProviders?.some((pid: any) => pid.toString() === userId);
 
         if (!isSeeker && !isNotifiedProvider) {
             // Return limited information for non-authorized users
@@ -92,6 +100,7 @@ export class ServiceRequestsController {
 
     @Patch(':id')
     @ApiOperation({ summary: 'Update a service request (seeker only)' })
+    @ApiOkResponse({ type: ServiceRequestResponseDto })
     async update(@Param('id') id: string, @Body() updateDto: UpdateServiceRequestDto, @Request() req) {
         const userId = req.user.uid || req.user.sub || req.user.userId;
         return this.serviceRequestsService.update(id, updateDto, userId);
@@ -100,6 +109,7 @@ export class ServiceRequestsController {
     @Post(':id/accept')
     @HttpCode(HttpStatus.OK)
     @ApiOperation({ summary: 'Accept a service request (provider only)' })
+    @ApiOkResponse({ type: AcceptServiceRequestResponseDto })
     async accept(@Param('id') id: string, @Body() acceptDto: AcceptServiceRequestDto, @Request() req) {
         const providerId = req.user.uid || req.user.sub || req.user.userId;
         return this.serviceRequestsService.accept(id, providerId, acceptDto);
@@ -119,6 +129,7 @@ export class ServiceRequestsController {
     @Post(':id/cancel')
     @HttpCode(HttpStatus.OK)
     @ApiOperation({ summary: 'Cancel a service request (seeker only)' })
+    @ApiOkResponse({ type: ServiceRequestResponseDto })
     async cancel(@Param('id') id: string, @Body('reason') reason: string, @Request() req) {
         const userId = req.user.uid || req.user.sub || req.user.userId;
         return this.serviceRequestsService.cancel(id, userId, reason);
@@ -126,19 +137,24 @@ export class ServiceRequestsController {
 
     @Get(':id/status')
     @ApiOperation({ summary: 'Get service request status and wave information' })
+    @ApiOkResponse({ type: ServiceRequestStatusDto })
     async getStatus(@Param('id') id: string, @Request() req) {
         const request = await this.serviceRequestsService.findById(id);
 
-        return {
+        const lifecycle = (request as any).lifecycle || {};
+        const matching = lifecycle.matching || {};
+        const order = lifecycle.order || {};
+        const response: ServiceRequestStatusDto = {
             requestId: request._id,
             status: request.status,
-            currentWave: (request as any).currentWave,
-            totalWaves: (request as any).notificationWaves?.length || 0,
-            totalProvidersNotified: (request as any).allNotifiedProviders?.length || 0,
+            currentWave: matching.currentWave ?? (request as any).currentWave,
+            totalWaves: (matching.notificationWaves?.length) || (request as any).notificationWaves?.length || 0,
+            totalProvidersNotified: (matching.allNotifiedProviders?.length) || (request as any).allNotifiedProviders?.length || 0,
             expiresAt: request.expiresAt,
-            acceptedBy: (request as any).acceptedProviderId || null,
-            orderId: request.orderId || null,
+            acceptedBy: order.providerId || (request as any).acceptedProviderId || null,
+            orderId: (order as any).orderId || (order as any).orderRef || (order as any).lifecycle?.order?.orderRef || null,
         };
+        return response;
     }
 
     @Get('stats/provider/:providerId')
@@ -147,11 +163,13 @@ export class ServiceRequestsController {
         // Get all requests where provider was notified
         const allRequests = await this.serviceRequestsService.findAll({});
 
-        const notifiedRequests = allRequests.requests.filter((request: any) => request.allNotifiedProviders?.some((pid: any) => pid.toString() === providerId));
+        const notifiedRequests = allRequests.requests.filter((request: any) => ((request.lifecycle?.matching?.allNotifiedProviders ?? request.allNotifiedProviders) || [])
+            .some((pid: any) => pid.toString() === providerId));
 
-        const acceptedRequests = notifiedRequests.filter((request: any) => request.acceptedProviderId?.toString() === providerId);
+        const acceptedRequests = notifiedRequests.filter((request: any) => (request.lifecycle?.order?.providerId?.toString?.() || request.acceptedProviderId?.toString?.()) === providerId);
 
-        const declinedRequests = notifiedRequests.filter((request: any) => request.declinedProviders?.some((pid: any) => pid.toString() === providerId));
+        const declinedRequests = notifiedRequests.filter((request: any) => ((request.lifecycle?.matching?.declinedProviders ?? request.declinedProviders) || [])
+            .some((pid: any) => pid.toString() === providerId));
 
         return {
             totalNotified: notifiedRequests.length,

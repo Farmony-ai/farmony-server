@@ -62,24 +62,25 @@ export class MatchesOrchestratorService {
         if (request.status !== ServiceRequestStatus.OPEN && request.status !== ServiceRequestStatus.MATCHED) {
             this.logger.log(`Request ${requestId} status is ${request.status}, skipping wave`);
             return {
-                waveNumber: request.currentWave,
+                waveNumber: (request as any).lifecycle?.matching?.currentWave ?? 0,
                 providersNotified: 0,
                 nextWaveScheduled: false,
             };
         }
 
         // Check if we've reached max waves
-        if (request.currentWave >= WAVE_CONFIG.maxWaves) {
+        const currentWave = (request as any).lifecycle?.matching?.currentWave ?? 0;
+        if (currentWave >= WAVE_CONFIG.maxWaves) {
             await this.handleNoProvidersAvailable(request);
             return {
-                waveNumber: request.currentWave,
+                waveNumber: currentWave,
                 providersNotified: 0,
                 nextWaveScheduled: false,
             };
         }
 
-        const waveNumber = request.currentWave + 1;
-        const radius = WAVE_CONFIG.radiusIncrements[request.currentWave];
+        const waveNumber = currentWave + 1;
+        const radius = WAVE_CONFIG.radiusIncrements[currentWave];
 
         this.logger.log(`Processing wave ${waveNumber} for request ${requestId} with radius ${radius}m`);
 
@@ -89,23 +90,25 @@ export class MatchesOrchestratorService {
             radiusMeters: radius,
             categoryId: request.categoryId.toString(),
             subCategoryId: request.subCategoryId?.toString(),
-            excludeProviderIds: request.allNotifiedProviders.map((id) => id.toString()),
+            excludeProviderIds: ((request as any).lifecycle?.matching?.allNotifiedProviders ?? []).map((id: any) => id.toString()),
         });
 
         if (candidates.length < WAVE_CONFIG.minProvidersPerWave) {
             // Not enough new providers in this wave, try next wave immediately
-            if (request.currentWave < WAVE_CONFIG.maxWaves - 1) {
-                request.currentWave++;
-                await request.save();
-                this.logger.log(`Insufficient providers in wave ${waveNumber}, advancing to wave ${request.currentWave + 1}`);
-                return this.processNextWave(requestId);
-            } else {
+            if (currentWave >= WAVE_CONFIG.maxWaves - 1) {
                 await this.handleNoProvidersAvailable(request);
                 return {
                     waveNumber: waveNumber,
                     providersNotified: 0,
                     nextWaveScheduled: false,
                 };
+            } else {
+                (request as any).lifecycle = (request as any).lifecycle || {};
+                (request as any).lifecycle.matching = (request as any).lifecycle.matching || {};
+                (request as any).lifecycle.matching.currentWave = currentWave + 1;
+                await request.save();
+                this.logger.log(`Insufficient providers in wave ${waveNumber}, advancing to wave ${(request as any).lifecycle.matching.currentWave + 1}`);
+                return this.processNextWave(requestId);
             }
         }
 
@@ -119,9 +122,11 @@ export class MatchesOrchestratorService {
         };
 
         // Update request with wave info
-        request.notificationWaves.push(wave as any);
-        request.currentWave = waveNumber;
-        request.allNotifiedProviders.push(...candidates.map((c) => new Types.ObjectId(c.providerId)));
+        (request as any).lifecycle = (request as any).lifecycle || {};
+        (request as any).lifecycle.matching = (request as any).lifecycle.matching || { notificationWaves: [], allNotifiedProviders: [], declinedProviders: [] };
+        (request as any).lifecycle.matching.notificationWaves.push(wave as any);
+        (request as any).lifecycle.matching.currentWave = waveNumber;
+        (request as any).lifecycle.matching.allNotifiedProviders.push(...candidates.map((c) => new Types.ObjectId(c.providerId)));
         request.status = ServiceRequestStatus.MATCHED;
 
         // Set next wave time if not the last wave
@@ -129,7 +134,7 @@ export class MatchesOrchestratorService {
         if (waveNumber < WAVE_CONFIG.maxWaves) {
             nextWaveAt = new Date();
             nextWaveAt.setMinutes(nextWaveAt.getMinutes() + WAVE_CONFIG.waveDelayMinutes);
-            request.nextWaveAt = nextWaveAt;
+            (request as any).lifecycle.matching.nextWaveAt = nextWaveAt;
         }
 
         await request.save();
@@ -152,7 +157,7 @@ export class MatchesOrchestratorService {
      */
     async scheduleNextWave(requestId: string, at: Date): Promise<void> {
         await this.serviceRequestModel.findByIdAndUpdate(requestId, {
-            $set: { nextWaveAt: at },
+            $set: { 'lifecycle.matching.nextWaveAt': at },
         });
 
         this.logger.debug(`Scheduled next wave for request ${requestId} at ${at.toISOString()}`);
@@ -171,7 +176,7 @@ export class MatchesOrchestratorService {
         }
 
         // Check if provider was notified
-        if (!request.allNotifiedProviders.some((pid) => pid.toString() === providerId)) {
+        if (!((request as any).lifecycle?.matching?.allNotifiedProviders || []).some((pid: any) => pid.toString() === providerId)) {
             throw new ForbiddenException('You were not notified about this request');
         }
 
@@ -220,15 +225,16 @@ export class MatchesOrchestratorService {
             {
                 _id: requestId,
                 status: ServiceRequestStatus.MATCHED,
-                allNotifiedProviders: new Types.ObjectId(providerId),
+                'lifecycle.matching.allNotifiedProviders': new Types.ObjectId(providerId),
             },
             {
                 $set: {
                     status: ServiceRequestStatus.ACCEPTED,
-                    acceptedProviderId: new Types.ObjectId(providerId),
-                    acceptedListingId: new Types.ObjectId(matchingListing._id),
-                    acceptedAt: new Date(),
-                    acceptedPrice: matchingListing.price,
+                    // lifecycle fields
+                    'lifecycle.order.providerId': new Types.ObjectId(providerId),
+                    'lifecycle.order.listingId': new Types.ObjectId(matchingListing._id),
+                    'lifecycle.order.acceptedAt': new Date(),
+                    'lifecycle.order.agreedPrice': matchingListing.price,
                 },
             },
             { new: true }
@@ -263,9 +269,16 @@ export class MatchesOrchestratorService {
 
         const order = await this.ordersService.createFromServiceRequest(orderData);
 
-        // Update request with order ID
-        result.orderId = (order as any)._id;
-        await result.save();
+        // Update request with order ref and payment info
+        await this.serviceRequestModel.updateOne(
+          { _id: requestId },
+          {
+            $set: {
+              'lifecycle.order.orderRef': (order as any)._id,
+              'lifecycle.order.payment.totalAmount': totalAmount,
+            },
+          }
+        );
 
         // Notify seeker about acceptance
         await this.notificationService.notifySeekerAccepted(request.seekerId.toString(), {
@@ -277,7 +290,9 @@ export class MatchesOrchestratorService {
         });
 
         // Notify all other notified providers that request is no longer available
-        const otherProviders = request.allNotifiedProviders.filter((pid) => pid.toString() !== providerId).map((pid) => pid.toString());
+        const otherProviders = ((request as any).lifecycle?.matching?.allNotifiedProviders || [])
+            .filter((pid: any) => pid.toString() !== providerId)
+            .map((pid: any) => pid.toString());
 
         await this.notificationService.notifyProvidersClosed(otherProviders, requestId, 'accepted_by_another');
 
@@ -299,13 +314,16 @@ export class MatchesOrchestratorService {
             throw new NotFoundException('Service request not found');
         }
 
-        if (!request.allNotifiedProviders.some((pid) => pid.toString() === providerId)) {
+        if (!((request as any).lifecycle?.matching?.allNotifiedProviders || []).some((pid: any) => pid.toString() === providerId)) {
             throw new ForbiddenException('You were not notified about this request');
         }
 
         // Add to declined providers list
-        if (!request.declinedProviders.some((pid) => pid.toString() === providerId)) {
-            request.declinedProviders.push(new Types.ObjectId(providerId));
+        const declined = ((request as any).lifecycle?.matching?.declinedProviders || []).map((pid: any) => pid.toString());
+        if (!declined.includes(providerId)) {
+            (request as any).lifecycle = (request as any).lifecycle || {};
+            (request as any).lifecycle.matching = (request as any).lifecycle.matching || { declinedProviders: [] };
+            (request as any).lifecycle.matching.declinedProviders.push(new Types.ObjectId(providerId));
             await request.save();
         }
 

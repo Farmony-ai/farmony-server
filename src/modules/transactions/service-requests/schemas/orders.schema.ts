@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
+import { EmbeddedAddressDto } from '@common/geo/geo.dto';
 
 export type OrderDocument = Order & Document;
 
@@ -78,15 +79,7 @@ export class Order {
       isTemporary: { type: Boolean, default: true }
     }
   })
-  embeddedAddress?: { // Fallback for one-time addresses
-    addressLine1: string;
-    village: string;
-    district: string;
-    state: string;
-    pincode: string;
-    coordinates: [number, number];
-    isTemporary: boolean;
-  };
+  embeddedAddress?: EmbeddedAddressDto; // Fallback for one-time addresses
 
   // Backward compatibility - keep for existing data
   @Prop({ type: [Number] })

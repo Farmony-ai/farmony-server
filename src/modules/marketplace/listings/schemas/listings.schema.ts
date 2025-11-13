@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
+import { GeoPointDto } from '@common/geo/geo.dto';
 
 export type ListingDocument = Listing & Document;
 
@@ -26,6 +27,7 @@ export class Listing {
   @Prop({ type: String })
   videoUrl?: string; // For video demonstrations
 
+  // Backward-compat location for geo queries
   @Prop({
     type: {
       type: String,
@@ -38,9 +40,35 @@ export class Listing {
       required: false
     }
   })
-  location: {
-    type: string;
-    coordinates: number[];
+  location: GeoPointDto;
+
+  // Docs-compliant serviceAddress block
+  @Prop({
+    type: {
+      addressId: { type: Types.ObjectId },
+      village: { type: String },
+      district: { type: String },
+      state: { type: String },
+      pincode: { type: String },
+      location: {
+        type: {
+          type: String,
+          enum: ['Point'],
+          default: 'Point',
+          required: true,
+        },
+        coordinates: { type: [Number], required: false },
+      },
+    },
+    required: false,
+  })
+  serviceAddress?: {
+    addressId?: Types.ObjectId;
+    village?: string;
+    district?: string;
+    state?: string;
+    pincode?: string;
+    location?: GeoPointDto;
   };
 
   @Prop({ type: Number, required: true })
@@ -51,6 +79,21 @@ export class Listing {
 
   @Prop({ type: Number })
   minimumOrder?: number; // Minimum quantity/duration
+
+  // Docs-aligned availability block (optional)
+  @Prop({
+    type: {
+      defaultSchedule: { type: Object },
+      blockedDates: { type: [String], default: [] },
+      customDates: [{ date: String, slots: [{ start: String, end: String }] }],
+    },
+    required: false,
+  })
+  availability?: {
+    defaultSchedule?: Record<string, any>;
+    blockedDates?: string[];
+    customDates?: Array<{ date: string; slots: Array<{ start: string; end: string }> }>;
+  };
 
   @Prop({ type: Date })
   availableFrom: Date;
@@ -82,6 +125,7 @@ export class Listing {
 
 export const ListingSchema = SchemaFactory.createForClass(Listing);
 ListingSchema.index({ location: '2dsphere' });
+ListingSchema.index({ 'serviceAddress.location': '2dsphere' });
 ListingSchema.index({ providerId: 1, isActive: 1 });
 ListingSchema.index({ categoryId: 1, subCategoryId: 1, isActive: 1 });
 ListingSchema.index({ tags: 1 });

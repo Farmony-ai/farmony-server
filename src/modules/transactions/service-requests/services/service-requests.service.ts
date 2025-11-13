@@ -56,9 +56,18 @@ export class ServiceRequestsService {
             expiresAt,
             metadata: createDto.metadata,
             attachments: createDto.attachments || [],
+            // legacy fields (for compatibility)
             currentWave: 0,
             notificationWaves: [],
             allNotifiedProviders: [],
+            // lifecycle fields
+            lifecycle: {
+                matching: {
+                    currentWave: 0,
+                    notificationWaves: [],
+                    allNotifiedProviders: [],
+                },
+            },
         });
 
         const savedRequest = await serviceRequest.save();
@@ -95,6 +104,8 @@ export class ServiceRequestsService {
                 type: 'Point',
                 coordinates: coordinates,
             };
+            // ensure lifecycle exists (no-op for persistence if not present)
+            updatePayload['lifecycle.matching'] = (request as any).lifecycle?.matching || { currentWave: 0, notificationWaves: [] };
         }
 
         const mutableFields: Array<keyof UpdateServiceRequestDto> = ['title', 'description', 'serviceStartDate', 'serviceEndDate', 'metadata', 'attachments', 'cancellationReason'];
@@ -169,7 +180,7 @@ export class ServiceRequestsService {
         await this.notificationService.notifySeekerExpired(updatedRequest.seekerId.toString(), id);
 
         // Notify all notified providers using NotificationService
-        const providerIds = updatedRequest.allNotifiedProviders.map((pid) => pid.toString());
+        const providerIds = ((updatedRequest as any).lifecycle?.matching?.allNotifiedProviders || []).map((pid: any) => pid.toString());
         await this.notificationService.notifyProvidersClosed(providerIds, id, 'expired');
 
         return updatedRequest;
@@ -186,7 +197,8 @@ export class ServiceRequestsService {
             throw new BadRequestException('Cannot cancel request in current status');
         }
 
-        if (request.status === ServiceRequestStatus.ACCEPTED && request.orderId) {
+        // In lifecycle model, once accepted, cancellation is restricted; enforce by status only
+        if (request.status === ServiceRequestStatus.ACCEPTED) {
             throw new BadRequestException('Cannot cancel accepted request. Please cancel the order instead.');
         }
 
@@ -204,7 +216,7 @@ export class ServiceRequestsService {
             .lean();
 
         // Notify all notified providers using NotificationService
-        const providerIds = request.allNotifiedProviders.map((pid) => pid.toString());
+        const providerIds = ((request as any).lifecycle?.matching?.allNotifiedProviders || []).map((pid: any) => pid.toString());
         await this.notificationService.notifyProvidersClosed(providerIds, id, 'cancelled');
 
         return updatedRequest;
@@ -213,11 +225,11 @@ export class ServiceRequestsService {
     async findById(id: string): Promise<ServiceRequest> {
         const request = await this.serviceRequestModel
             .findById(id)
-            .populate('seekerId', 'name phone email profilePicture')
+            .populate('seekerId', 'name phone email profilePictureKey')
             .populate('categoryId', 'name icon')
             .populate('subCategoryId', 'name')
-            .populate('acceptedProviderId', 'name phone profilePicture')
-            .populate('acceptedListingId', 'title price unitOfMeasure')
+            .populate('lifecycle.order.providerId', 'name phone profilePicture')
+            .populate('lifecycle.order.listingId', 'title price unitOfMeasure')
             .populate('serviceAddressId')
             .lean();
 
@@ -276,7 +288,7 @@ export class ServiceRequestsService {
         const requestsWithAddresses = requests.map((request) => {
             if (request.serviceAddressId && typeof request.serviceAddressId === 'object') {
                 const addr = request.serviceAddressId as any;
-                request.address = [addr.addressLine1, addr.addressLine2, addr.village, addr.district, addr.state, addr.pincode].filter(Boolean).join(', ');
+                (request as any).address = [addr.addressLine1, addr.addressLine2, addr.village, addr.district, addr.state, addr.pincode].filter(Boolean).join(', ');
             }
             return request;
         });
@@ -291,13 +303,16 @@ export class ServiceRequestsService {
             throw new NotFoundException('Service request not found');
         }
 
-        if (!request.allNotifiedProviders.some((pid) => pid.toString() === providerId)) {
+        if (!((request as any).lifecycle?.matching?.allNotifiedProviders || []).some((pid: any) => pid.toString() === providerId)) {
             throw new ForbiddenException('You were not notified about this request');
         }
 
         // Add to declined providers list
-        if (!request.declinedProviders.some((pid) => pid.toString() === providerId)) {
-            request.declinedProviders.push(new Types.ObjectId(providerId));
+        const declined = ((request as any).lifecycle?.matching?.declinedProviders || []).map((pid: any) => pid.toString());
+        if (!declined.includes(providerId)) {
+            (request as any).lifecycle = (request as any).lifecycle || {};
+            (request as any).lifecycle.matching = (request as any).lifecycle.matching || { declinedProviders: [] };
+            (request as any).lifecycle.matching.declinedProviders.push(new Types.ObjectId(providerId));
             await request.save();
         }
 

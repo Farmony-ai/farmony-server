@@ -3,6 +3,7 @@ import * as admin from 'firebase-admin';
 import { ConfigService } from '@nestjs/config';
 import 'firebase-admin/storage';
 import { Bucket } from '@google-cloud/storage';
+import * as path from 'path';
 
 @Injectable()
 export class FirebaseAdminService implements OnModuleInit {
@@ -50,9 +51,14 @@ export class FirebaseAdminService implements OnModuleInit {
         const serviceAccountPath = this.configService.get<string>('FIREBASE_SERVICE_ACCOUNT_PATH');
         if (serviceAccountPath) {
             try {
+                // Resolve path relative to project root (process.cwd())
+                const absolutePath = path.isAbsolute(serviceAccountPath)
+                    ? serviceAccountPath
+                    : path.join(process.cwd(), serviceAccountPath);
+
                 // eslint-disable-next-line @typescript-eslint/no-var-requires
-                const serviceAccount = require(serviceAccountPath);
-                this.logger.log('Initializing Firebase with service account file.');
+                const serviceAccount = require(absolutePath);
+                this.logger.log(`Initializing Firebase with service account file: ${absolutePath}`);
                 return {
                     credential: admin.credential.cert(serviceAccount),
                     storageBucket,

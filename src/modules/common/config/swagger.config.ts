@@ -29,6 +29,9 @@ export function setupSwagger(app: INestApplication) {
     .addTag('KYC', 'KYC documents')
     .build();
 
-  const document = SwaggerModule.createDocument(app, config);
+  const document = SwaggerModule.createDocument(app, config, {
+    ignoreGlobalPrefix: false,
+    deepScanRoutes: true,
+  });
   SwaggerModule.setup('api/docs', app, document);
 }

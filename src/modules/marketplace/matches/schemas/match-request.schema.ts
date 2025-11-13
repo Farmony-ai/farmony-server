@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
+import { GeoPointDto } from '@common/geo/geo.dto';
 
 export type MatchRequestDocument = MatchRequest & Document;
 
@@ -19,7 +20,7 @@ export class MatchRequest {
     },
     coordinates: { type: [Number], required: true },
   })
-  user_point!: { type: 'Point'; coordinates: [number, number] };
+  user_point!: GeoPointDto;
 
   @Prop({ type: Types.ObjectId, ref: 'Catalogue', required: true })
   categoryId!: Types.ObjectId;
@@ -32,6 +33,8 @@ export class MatchRequest {
 
   @Prop({ type: String })
   idempotency_key?: string | null;
+
+  // Docs-compliant fields (virtuals): userPoint, limitN, idempotencyKey, expiresAt
 }
 
 export const MatchRequestSchema = SchemaFactory.createForClass(MatchRequest);
@@ -40,3 +43,21 @@ MatchRequestSchema.index({ user_point: '2dsphere' });
 MatchRequestSchema.index({ seekerId: 1 });
 MatchRequestSchema.index({ categoryId: 1 });
 MatchRequestSchema.index({ idempotency_key: 1 }, { unique: true, sparse: true });
+
+// Virtuals to align with docs naming
+MatchRequestSchema.virtual('userPoint')
+  .get(function (this: any) { return this.user_point; })
+  .set(function (this: any, v: any) { this.user_point = v; });
+
+MatchRequestSchema.virtual('limitN')
+  .get(function (this: any) { return this.limit_n; })
+  .set(function (this: any, v: any) { this.limit_n = v; });
+
+MatchRequestSchema.virtual('idempotencyKey')
+  .get(function (this: any) { return this.idempotency_key; })
+  .set(function (this: any, v: any) { this.idempotency_key = v; });
+
+// TTL support per docs
+// Add expiresAt with relaxed typing for Mongoose
+(MatchRequestSchema as any).add({ expiresAt: { type: Date, index: true } });
+MatchRequestSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });

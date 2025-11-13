@@ -32,8 +32,10 @@ export class WaveSchedulerService {
             const requestsNeedingWave = await this.serviceRequestModel
                 .find({
                     status: { $in: [ServiceRequestStatus.OPEN, ServiceRequestStatus.MATCHED] },
-                    nextWaveAt: { $lte: now },
-                    currentWave: { $lt: WAVE_CONFIG.maxWaves },
+                    $and: [
+                        { $or: [ { 'lifecycle.matching.nextWaveAt': { $lte: now } }, { nextWaveAt: { $lte: now } } ] },
+                        { $or: [ { 'lifecycle.matching.currentWave': { $lt: WAVE_CONFIG.maxWaves } }, { currentWave: { $lt: WAVE_CONFIG.maxWaves } } ] },
+                    ],
                 })
                 .limit(10) // Process 10 at a time to avoid overwhelming the system
                 .exec();

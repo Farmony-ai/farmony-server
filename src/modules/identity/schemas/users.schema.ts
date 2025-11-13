@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { pointDefinition } from '../../common/geo/geo.types';
+import { GeoPointDto } from '@common/geo/geo.dto';
 
 export type UserDocument = User & Document;
 
@@ -71,7 +72,7 @@ export class Address {
     pincode?: string;
 
     @Prop({ type: pointDefinition })
-    location?: { type: 'Point'; coordinates: [number, number] };
+    location?: GeoPointDto;
 
     @Prop({ type: Number })
     accuracy?: number;
@@ -148,7 +149,7 @@ export class User {
     phone: string;
 
     @Prop({ type: String })
-    profilePicture?: string;
+    profilePictureKey?: string;
 
     @Prop({ type: String, required: true, enum: ['individual', 'SHG', 'FPO', 'admin'], default: 'individual' })
     role: string;
@@ -171,6 +172,13 @@ export class User {
     @Prop({ type: [Types.ObjectId], ref: 'Catalogue' })
     serviceCategories?: Types.ObjectId[];
 
+    // Docs-aligned optional fields
+    @Prop({ type: Number })
+    serviceRadius?: number;
+
+    @Prop({ type: Number, default: 0 })
+    qualityScore?: number;
+
     @Prop({
         type: {
             asProvider: RatingSummarySchema,
@@ -190,3 +198,5 @@ export class User {
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
+// Ensure geospatial index for nested addresses
+UserSchema.index({ 'addresses.location': '2dsphere' });

@@ -79,14 +79,15 @@ export class SeekerService {
         let providerEmail = null;
         let providerId = null;
 
-        if (request.acceptedProvider) {
-            providerName = request.acceptedProvider.fullName || request.acceptedProvider.name;
-            providerPhone = request.acceptedProvider.phoneNumber;
-            providerEmail = request.acceptedProvider.email;
-            providerId = request.acceptedProvider._id?.toString();
-        } else if (request.acceptedProviderId) {
-            // If provider not populated, at least we have the ID
-            providerId = request.acceptedProviderId.toString();
+        const lifecycleOrder = (request as any).lifecycle?.order;
+        const populatedLifecycleProvider = lifecycleOrder?.providerId && typeof lifecycleOrder.providerId === 'object';
+        if (populatedLifecycleProvider) {
+            providerName = (lifecycleOrder as any).providerId.fullName || (lifecycleOrder as any).providerId.name;
+            providerPhone = (lifecycleOrder as any).providerId.phoneNumber;
+            providerEmail = (lifecycleOrder as any).providerId.email;
+            providerId = (lifecycleOrder as any).providerId._id?.toString();
+        } else if (lifecycleOrder?.providerId) {
+            providerId = lifecycleOrder.providerId.toString();
         }
 
         return {
@@ -103,7 +104,7 @@ export class SeekerService {
             serviceStartDate: request.serviceStartDate,
             serviceEndDate: request.serviceEndDate,
             location: request.location,
-            totalAmount: request.orderId ? request.finalAmount : null, // Only show amount if order was created
+            totalAmount: (request as any).lifecycle?.order?.payment?.totalAmount ?? null,
             createdAt: request.createdAt,
             updatedAt: request.updatedAt,
             category: request.category,
@@ -111,13 +112,13 @@ export class SeekerService {
             images: request.images,
             budget: request.budget,
             urgency: request.urgency,
-            waveCount: request.waves?.length || 0,
-            matchedProvidersCount: request.matchedProviderIds?.length || 0,
+            waveCount: ((request as any).lifecycle?.matching?.notificationWaves?.length) || 0,
+            matchedProvidersCount: ((request as any).lifecycle?.matching?.allNotifiedProviders?.length) || 0,
             isSearching,
             searchElapsedMinutes: elapsedMinutes,
-            nextWaveAt: request.nextWaveAt,
+            nextWaveAt: (request as any).lifecycle?.matching?.nextWaveAt ?? request.nextWaveAt,
             expiresAt: request.expiresAt,
-            orderId: request.orderId?.toString(),
+            orderId: ((request as any).lifecycle?.order?.orderRef)?.toString(),
         };
     }
 

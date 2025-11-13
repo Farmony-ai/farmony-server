@@ -73,6 +73,13 @@ export class Catalogue {
 
     @Prop({ type: Map, of: String })
     metadata?: Map<string, string>;
+
+    // Docs-aligned fields
+    @Prop({ type: [String], default: [] })
+    categoryPath?: string[];
+
+    @Prop({ type: String })
+    fullPath?: string;
 }
 
 export const CatalogueSchema = SchemaFactory.createForClass(Catalogue);
@@ -81,3 +88,4 @@ export const CatalogueSchema = SchemaFactory.createForClass(Catalogue);
 CatalogueSchema.index({ name: 1, parentId: 1 }, { unique: true });
 CatalogueSchema.index({ category: 1, isActive: 1 });
 CatalogueSchema.index({ parentId: 1, sortOrder: 1 });
+CatalogueSchema.index({ categoryPath: 1 });

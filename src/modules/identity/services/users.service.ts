@@ -52,7 +52,7 @@ export class UsersService {
         const userObj = user.toObject();
         return {
             ...userObj,
-            profilePictureUrl: this.storageService.getPublicUrl(user.profilePicture) || undefined,
+            profilePictureUrl: this.storageService.getPublicUrl(user.profilePictureKey) || undefined,
         };
     }
 
@@ -127,10 +127,10 @@ export class UsersService {
             throw new BadRequestException('Uploaded file is empty');
         }
 
-        const previousKey = user.profilePicture;
+        const previousKey = user.profilePictureKey;
         const key = await this.storageService.uploadFile(file, `profile-pictures/${userId}`);
 
-        user.profilePicture = key;
+        user.profilePictureKey = key;
         await user.save();
 
         if (previousKey && previousKey !== key) {
@@ -147,12 +147,12 @@ export class UsersService {
     async deleteProfilePicture(userId: string): Promise<UserDocument> {
         const user = await this.findById(userId);
 
-        if (user.profilePicture) {
-            await this.storageService.deleteFile(user.profilePicture);
+        if (user.profilePictureKey) {
+            await this.storageService.deleteFile(user.profilePictureKey);
         }
 
         // Update user document to remove profile picture reference
-        user.profilePicture = undefined;
+        user.profilePictureKey = undefined as any;
         return user.save();
     }
 

@@ -8,6 +8,7 @@ import { MatchRequest, MatchRequestDocument } from '../schemas/match-request.sch
 import { MatchCandidate, MatchCandidateDocument } from '../schemas/match-candidate.schema';
 import { CreateMatchDto } from '../dto/create-match.dto';
 import { FirebaseStorageService } from '@common/firebase/firebase-storage.service';
+import { ProviderDiscoveryService } from './provider-discovery.service';
 
 export type MatchResponse = {
     request_id: string;
@@ -32,7 +33,8 @@ export class MatchesService {
         @InjectModel(Catalogue.name) private readonly catalogueModel: Model<CatalogueDocument>,
         @InjectModel(MatchRequest.name) private readonly matchRequestModel: Model<MatchRequestDocument>,
         @InjectModel(MatchCandidate.name) private readonly matchCandidateModel: Model<MatchCandidateDocument>,
-        private readonly storageService: FirebaseStorageService
+        private readonly storageService: FirebaseStorageService,
+        private readonly providerDiscoveryService: ProviderDiscoveryService,
     ) {}
 
     async createMatch(dto: CreateMatchDto, idempotencyKey: string | null, seekerId: string | null): Promise<MatchResponse> {
@@ -47,39 +49,14 @@ export class MatchesService {
 
         const maxRadius = MAX_RADIUS_BY_CATEGORY[categoryId] ?? MAX_RADIUS_BY_CATEGORY.default;
 
-        // Build aggregation pipeline
-        const pipeline: any[] = [
-            {
-                $geoNear: {
-                    near: { type: 'Point', coordinates: [lon, lat] },
-                    key: 'coordinates',
-                    spherical: true,
-                    distanceField: 'distance_m',
-                    maxDistance: maxRadius,
-                    query: {
-                        serviceCategories: new Types.ObjectId(categoryId),
-                        isVerified: true,
-                        kycStatus: 'approved',
-                        serviceRadius: { $exists: true, $gt: 0 },
-                    },
-                },
-            },
-            { $match: { $expr: { $lte: ['$distance_m', '$serviceRadius'] } } },
-            { $sort: { distance_m: 1, qualityScore: -1 } },
-            { $limit: limit },
-            {
-                $project: {
-                    _id: 1,
-                    name: 1,
-                    phone: 1,
-                    profilePicture: 1,
-                    distance_m: 1,
-                },
-            },
-        ];
-
-        const hits = await this.userModel.aggregate(pipeline).exec();
-        const status: MatchResponse['status'] = hits.length ? 'CREATED' : 'NO_COVERAGE';
+        // Listing-centric discovery via ProviderDiscoveryService
+        const candidates = await this.providerDiscoveryService.findCandidates({
+            coordinates: [lon, lat],
+            radiusMeters: maxRadius,
+            categoryId,
+        });
+        const limited = candidates.slice(0, limit);
+        const status: MatchResponse['status'] = limited.length ? 'CREATED' : 'NO_COVERAGE';
         const requestId = randomUUID();
 
         // Transaction-like behavior without requiring Mongo transactions: use unique idempotency_key
@@ -87,12 +64,17 @@ export class MatchesService {
         if (idempotencyKey) {
             existing = await this.matchRequestModel.findOne({ idempotency_key: idempotencyKey }).lean();
             if (existing) {
-                const prior = await this.matchCandidateModel.find({ request_id: existing._id }).populate('provider_id', 'name phone profilePicture').sort({ rank_order: 1 }).lean();
+                const prior = await this.matchCandidateModel
+                    .find({ request_id: existing._id })
+                    .populate('provider_id', 'name phone profilePictureKey')
+                    .sort({ rank_order: 1 })
+                    .lean();
                 return this.formatMatchResponse(String(existing._id), prior, existing.status as any);
             }
         }
 
         // Create request and candidates
+        const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour TTL
         await this.matchRequestModel.create({
             _id: requestId,
             seekerId: seekerId ? new Types.ObjectId(seekerId) : null,
@@ -101,26 +83,37 @@ export class MatchesService {
             limit_n: limit,
             status,
             idempotency_key: idempotencyKey ?? null,
+            expiresAt,
         });
 
-        if (hits.length) {
+        if (limited.length) {
             await this.matchCandidateModel.insertMany(
-                hits.map((p: any, i: number) => ({
+                limited.map((c: any, i: number) => ({
                     request_id: requestId,
-                    provider_id: p._id,
-                    distance_m: Math.round(p.distance_m),
+                    provider_id: new Types.ObjectId(c.providerId),
+                    distance_m: Math.round(c.distanceMeters),
                     rank_order: i + 1,
                 }))
             );
         }
 
-        const providers = hits.map((p: any) => ({
-            _id: String(p._id),
-            name: p.name,
-            distance_m: Math.round(p.distance_m),
-            phone: p.phone,
-            profilePictureUrl: p.profilePicture ? this.storageService.getPublicUrl(p.profilePicture) : undefined,
-        }));
+        // Hydrate provider contact/picture from users collection
+        const providerIds = limited.map((c) => new Types.ObjectId(c.providerId));
+        const users = providerIds.length
+            ? await this.userModel.find({ _id: { $in: providerIds } }).select('name phone profilePictureKey').lean()
+            : [];
+        const userMap = new Map(users.map((u: any) => [u._id.toString(), u]));
+
+        const providers = limited.map((c) => {
+            const u = userMap.get(c.providerId);
+            return {
+                _id: c.providerId,
+                name: u?.name ?? c.providerName ?? 'Provider',
+                distance_m: Math.round(c.distanceMeters),
+                phone: u?.phone,
+                profilePictureUrl: u?.profilePictureKey ? this.storageService.getPublicUrl(u.profilePictureKey) : undefined,
+            };
+        });
 
         return { request_id: requestId, providers, status };
     }
@@ -134,7 +127,7 @@ export class MatchesService {
 
         const candidates = await this.matchCandidateModel
             .find({ request_id: requestId })
-            .populate('provider_id', 'name phone profilePicture isVerified')
+            .populate('provider_id', 'name phone profilePictureKey isVerified')
             .sort({ rank_order: 1 })
             .lean();
 
@@ -142,7 +135,7 @@ export class MatchesService {
             ...request,
             candidates: candidates.map((c: any) => ({
                 ...c,
-                profilePictureUrl: c.provider_id?.profilePicture ? this.storageService.getPublicUrl(c.provider_id.profilePicture) : undefined,
+                profilePictureUrl: c.provider_id?.profilePictureKey ? this.storageService.getPublicUrl(c.provider_id.profilePictureKey) : undefined,
             })),
         };
     }
@@ -153,7 +146,7 @@ export class MatchesService {
             name: c.provider_id.name,
             distance_m: c.distance_m,
             phone: c.provider_id.phone,
-            profilePictureUrl: c.provider_id.profilePicture ? this.storageService.getPublicUrl(c.provider_id.profilePicture) : undefined,
+            profilePictureUrl: c.provider_id.profilePictureKey ? this.storageService.getPublicUrl(c.provider_id.profilePictureKey) : undefined,
         }));
 
         return {

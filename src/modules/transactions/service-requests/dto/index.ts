@@ -5,3 +5,5 @@ export * from './decline-service-request.dto';
 export * from './service-request-filters.dto';
 export * from './create-order.dto';
 export * from './update-order-status.dto';
+export * from './service-request-response.dto';
+export * from './service-request-status.dto';
