@@ -12,8 +12,8 @@ modules/
 
   transactions/          ← Money flow
     service-requests/    ← Main workflow
-    payments/            ← Future: Extract from service-requests
-    disputes/            ← Future: Extract from service-requests
+    payments/            ← Future: Payment processing (NOT in MVP)
+    disputes/            ← Future: Service quality disputes (NOT in MVP)
 
   engagement/            ← User interactions
     ratings/             ← Future: Extract from service-requests

@@ -51,7 +51,7 @@ This document defines the complete scope of work for the Farmony agricultural ma
 
 **Account Features:**
 
--   ✅ Password reset functionality
+-   ✅ Phone number verification and OTP resend
 -   ✅ Profile editing and updates
 -   ✅ Account deactivation option
 -   ✅ Session management and security
@@ -78,23 +78,29 @@ This document defines the complete scope of work for the Farmony agricultural ma
 -   ✅ View request details before acceptance
 -   ✅ Dashboard showing available, in-progress, and completed requests
 
-### 2.3 Service Listings & Discovery
+### 2.3 Service Listings & Catalogue
 
-**Seeker Features:**
-
--   ✅ Browse available equipment types/categories
--   ✅ View provider profiles and equipment details
--   ✅ See provider ratings and reviews
--   ✅ Filter by location and equipment type
--   ✅ Search functionality for specific equipment
-
-**Provider Features:**
+**Provider Listing Management:**
 
 -   ✅ Create and manage equipment listings
 -   ✅ Set pricing and availability
 -   ✅ Update equipment specifications
 -   ✅ Toggle availability status
 -   ✅ View listing performance metrics
+
+**Equipment Catalogue:**
+
+-   ✅ Pre-defined equipment categories (tractors, harvesters, etc.)
+-   ✅ Category browsing for reference
+-   ✅ Equipment type standardization
+
+**Provider Discovery:**
+
+-   ✅ View matched provider profiles (after wave notification)
+-   ✅ See provider ratings and reviews
+-   ✅ View equipment details of matched providers
+
+**Note:** Primary discovery mechanism is wave-based matching (Section 2.2). Seekers don't manually search - the system finds and notifies eligible providers automatically. Listings serve as the data source for matching algorithms.
 
 ### 2.4 Order Management
 
@@ -391,8 +397,8 @@ The following 10 acceptance criteria must be met for project completion and fina
 
 ### M1: Core Authentication & User Management
 
-**Delivery Date:** November 15, 2025 (3 weeks)  
-**Payment:** ₹2,50,000 upon acceptance
+**Delivery Date:** November 15, 2025 (3 weeks)
+**Payment:** ₹1,75,000 upon acceptance
 
 **Deliverables:**
 
@@ -409,8 +415,8 @@ The following 10 acceptance criteria must be met for project completion and fina
 
 ### M2: Matching Engine & Service Management
 
-**Delivery Date:** December 6, 2025 (3 weeks)  
-**Payment:** ₹2,50,000 upon acceptance
+**Delivery Date:** December 6, 2025 (3 weeks)
+**Payment:** ₹1,75,000 upon acceptance
 
 **Deliverables:**
 
@@ -427,8 +433,8 @@ The following 10 acceptance criteria must be met for project completion and fina
 
 ### M3: Orders, Messaging & Reviews
 
-**Delivery Date:** December 20, 2025 (2 weeks)  
-**Payment:** ₹2,50,000 upon acceptance
+**Delivery Date:** December 20, 2025 (2 weeks)
+**Payment:** ₹1,75,000 upon acceptance
 
 **Deliverables:**
 
@@ -445,8 +451,8 @@ The following 10 acceptance criteria must be met for project completion and fina
 
 ### M4: Admin Dashboard & Launch Preparation
 
-**Delivery Date:** January 15, 2026 (4 weeks)  
-**Payment:** ₹2,50,000 upon acceptance
+**Delivery Date:** January 15, 2026 (4 weeks)
+**Payment:** ₹1,75,000 upon acceptance
 
 **Deliverables:**
 
@@ -652,10 +658,10 @@ Client (Lakshmana Ravula) is responsible for providing:
 
 **Milestone Payments (Remaining):**
 
--   **M1 Payment:** ₹2,50,000 upon M1 acceptance (Nov 15, 2025)
--   **M2 Payment:** ₹2,50,000 upon M2 acceptance (Dec 6, 2025)
--   **M3 Payment:** ₹2,50,000 upon M3 acceptance (Dec 20, 2025)
--   **M4 Payment:** ₹2,50,000 upon M4 acceptance (Jan 15, 2026)
+-   **M1 Payment:** ₹1,75,000 upon M1 acceptance (Nov 15, 2025)
+-   **M2 Payment:** ₹1,75,000 upon M2 acceptance (Dec 6, 2025)
+-   **M3 Payment:** ₹1,75,000 upon M3 acceptance (Dec 20, 2025)
+-   **M4 Payment:** ₹1,75,000 upon M4 acceptance (Jan 15, 2026)
 
 **Total Remaining:** ₹7,00,000
 

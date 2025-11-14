@@ -69,7 +69,7 @@ Wave 5: 50km+    → Wide regional
   - Escrow management (future)
 - **Completion**:
   - Embedded ratings
-  - Dispute resolution (future)
+  - Service quality dispute resolution (future - NOT in MVP)
 
 ### 4. Engagement Module
 **Purpose**: User interactions and communications

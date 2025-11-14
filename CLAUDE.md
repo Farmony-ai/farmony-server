@@ -54,8 +54,8 @@ modules/
 
   transactions/          ← Money flow
     service-requests/    ← Main workflow (contains entire lifecycle)
-    payments/            ← Future: Payment processing
-    disputes/            ← Future: Dispute resolution
+    payments/            ← Future: Payment processing (NOT in MVP)
+    disputes/            ← Future: Service quality disputes (NOT in MVP)
 
   engagement/            ← User interactions
     ratings/             ← Future: Extract from service-requests
@@ -91,8 +91,8 @@ ServiceRequest (`docs/04-database-schemas.md:258`) is the central entity contain
    - Escrow management (future)
 4. **Completion**:
    - Ratings exchange (embedded in ServiceRequest)
-   - Payment release (future)
-   - Dispute handling if needed (future)
+   - Payment release (future - NOT in MVP)
+   - Service quality dispute handling (future - NOT in MVP)
 
 ### Wave-Based Matching Algorithm
 
@@ -193,7 +193,8 @@ The ServiceRequest entity is comprehensive. When modifying:
 - Check `lifecycle.matching` for wave-based matching state
 - Check `lifecycle.order` for accepted order details
 - Status transitions: open → matched → accepted → in_progress → completed
-- Alternative flows: expired, cancelled, no_providers_available, under_dispute
+- Alternative flows: expired, cancelled, no_providers_available
+- Future status (not in MVP): under_dispute
 
 ### Geospatial Queries
 All location data uses MongoDB GeoJSON format:
