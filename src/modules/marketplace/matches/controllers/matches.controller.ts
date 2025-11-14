@@ -3,7 +3,6 @@ import { ApiTags, ApiOperation, ApiHeader, ApiBearerAuth } from '@nestjs/swagger
 import { CreateMatchDto } from '../dto/create-match.dto';
 import { MatchesService } from '../services/matches.service';
 import { FirebaseAuthGuard } from '@identity/guards/firebase-auth.guard';
-import { OptionalAuthGuard } from '@identity/guards/optional-auth.guard';
 
 @ApiTags('matches')
 @Controller('matches')
@@ -11,11 +10,12 @@ export class MatchesController {
     constructor(private readonly matchesService: MatchesService) {}
 
     @Post()
-    @UseGuards(OptionalAuthGuard)
-    @ApiOperation({ summary: 'Find matching providers for a location' })
+    @UseGuards(FirebaseAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Create a match request for providers (requires authentication)' })
     @ApiHeader({ name: 'Idempotency-Key', required: false })
-    async create(@Body() dto: CreateMatchDto, @Headers('Idempotency-Key') idempKey?: string, @Request() req?: any) {
-        const seekerId = req?.user?.uid || req?.user?.userId || null;
+    async create(@Body() dto: CreateMatchDto, @Request() req: any, @Headers('Idempotency-Key') idempKey?: string) {
+        const seekerId = req.user.uid || req.user.userId;
         return this.matchesService.createMatch(dto, idempKey ?? null, seekerId);
     }
 
