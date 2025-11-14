@@ -70,6 +70,7 @@ modules/
   common/                ← Infrastructure
     firebase/           ← Firebase services
     geo/                ← Geolocation utilities
+    queues/             ← Background job processing (BullMQ)
 ```
 
 ## Core Business Flow
@@ -105,6 +106,13 @@ Wave 5: 50km+ radius    - Wide regional
 ```
 
 Providers are notified closest-first within each wave. System waits 5 minutes for response before expanding to next wave.
+
+**Important**: Wave progression is handled by **BullMQ job queue**, NOT polling:
+- When ServiceRequest created, 5 jobs scheduled (one per wave) with delays
+- Jobs stored in Redis with precise execution times
+- Worker processes jobs and calls `MatchingService.progressToWave()`
+- Jobs cancelled automatically if provider accepts early
+- See `docs/02-architecture-overview.md` Background Job Processing section
 
 ## Database Schema
 
@@ -144,6 +152,10 @@ PORT=3000
 
 # MongoDB
 MONGODB_URI=mongodb://localhost:27017/farmony
+
+# Redis (for job queues)
+REDIS_HOST=localhost
+REDIS_PORT=6379
 
 # Firebase Admin SDK
 FIREBASE_PROJECT_ID=

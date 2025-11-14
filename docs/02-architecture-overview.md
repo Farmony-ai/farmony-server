@@ -252,6 +252,116 @@ The system deliberately avoids WebSockets in favor of a simpler, more reliable a
 - Simpler infrastructure (no WebSocket servers)
 - More reliable in poor network conditions
 
+## Background Job Processing
+
+### Wave Progression Architecture
+
+The wave-based matching system requires automated progression through waves at timed intervals. This is handled through a job queue system rather than polling.
+
+**Problem**: When a ServiceRequest is created, the system needs to:
+1. Send Wave 1 notifications immediately
+2. Wait 5 minutes, then trigger Wave 2 (if no acceptance)
+3. Continue through Wave 5 with proper timing
+
+**Solution**: BullMQ job queue with Redis
+
+```
+ServiceRequest Created
+    ↓
+Schedule 5 jobs (one per wave) with delays
+    ↓
+Redis Queue holds scheduled jobs
+    ↓
+Job executes at scheduled time → BullMQ Worker picks it up
+    ↓
+Worker calls MatchingService.progressWave()
+    ↓
+MatchingService finds providers & sends FCM
+```
+
+### Implementation Components
+
+**1. Queue Module** (`modules/common/queues/`)
+- `QueueModule`: BullMQ configuration and queue registration
+- `QueueService`: Schedules and cancels wave progression jobs
+- `WaveProgressionProcessor`: Processes wave jobs
+
+**2. Wave Scheduling**
+```javascript
+async scheduleWaveProgression(serviceRequestId: string) {
+  const waveDelays = [
+    { wave: 1, delay: 0 },              // Immediate
+    { wave: 2, delay: 5 * 60 * 1000 },  // 5 minutes
+    { wave: 3, delay: 10 * 60 * 1000 }, // 10 minutes
+    { wave: 4, delay: 15 * 60 * 1000 }, // 15 minutes
+    { wave: 5, delay: 20 * 60 * 1000 }, // 20 minutes
+  ];
+
+  for (const { wave, delay } of waveDelays) {
+    await queue.add('process-wave', {
+      serviceRequestId,
+      wave,
+    }, {
+      delay,
+      jobId: `${serviceRequestId}-wave-${wave}`, // Prevents duplicates
+    });
+  }
+}
+```
+
+**3. Job Processing Logic**
+- Check if ServiceRequest still exists
+- Skip if status is not 'open' (already matched/completed)
+- Skip if already progressed past this wave
+- Skip if provider accepted in previous wave
+- If all checks pass: Call `MatchingService.progressToWave()`
+- Cancel remaining waves if request is resolved
+
+**4. Job Cancellation**
+When a provider accepts or request is cancelled:
+```javascript
+await queueService.cancelWaveProgression(serviceRequestId);
+// Removes all pending wave jobs from queue
+```
+
+### Benefits of Job Queue Approach
+
+✅ **Scalable**: Each request schedules its own jobs - no database scanning
+✅ **Precise timing**: Jobs execute exactly when needed
+✅ **Fault tolerant**: Redis persistence survives app restarts
+✅ **Automatic retries**: BullMQ handles transient failures
+✅ **Cancellable**: Stop progression when request is matched
+✅ **Observable**: BullBoard UI for monitoring
+
+### Alternative Approaches (Not Recommended)
+
+**Naive Cron Job** ❌
+```javascript
+// Runs every minute, scans ALL service requests
+@Cron('* * * * *')
+async checkAllServiceRequests() {
+  const requests = await ServiceRequest.find({ status: 'open' });
+  // Problem: 10,000 active requests = 10,000 checks per minute
+}
+```
+
+**Hybrid Approach** (Optional fallback)
+- Primary: Job queue (efficient)
+- Backup: Cron every 5 minutes to catch job failures
+- Only for production environments with high reliability requirements
+
+### Dependencies
+- `@nestjs/bullmq`: NestJS integration for BullMQ
+- `bullmq`: Modern Redis-based queue library
+- `ioredis`: Redis client
+- Redis server (required infrastructure)
+
+### Environment Configuration
+```bash
+REDIS_HOST=localhost
+REDIS_PORT=6379
+```
+
 ## Security Architecture
 
 ### Authentication Flow

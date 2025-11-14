@@ -28,4 +28,5 @@ modules/
   common/                ← Infrastructure
     firebase/
     geo/
+    queues/              ← Background job processing
 ```
