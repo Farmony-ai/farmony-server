@@ -10,6 +10,7 @@ import {
   Min,
   Max,
   ArrayMaxSize,
+  IsDateString,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -119,18 +120,25 @@ export class CreateServiceRequestDto {
   @IsString()
   pincode?: string;
 
+  @ApiPropertyOptional({ description: 'Full address string', example: '1540, 42B, Chandigarh, Chandigarh, 160036' })
+  @IsOptional()
+  @IsString()
+  address?: string;
+
   @ApiProperty({ description: 'Service start date', example: '2025-11-15T09:00:00Z' })
-  @IsDate()
-  @Type(() => Date)
+  @IsDateString()
   @IsNotEmpty()
-  serviceStartDate: Date;
+  serviceStartDate: Date | string;
 
   @ApiProperty({ description: 'Service end date', example: '2025-11-15T17:00:00Z' })
-  @IsDate()
-  @Type(() => Date)
+  @IsDateString()
   @IsNotEmpty()
-  serviceEndDate: Date;
+  serviceEndDate: Date | string;
 
+  @ApiPropertyOptional({ description: 'Urgency level', enum: ['immediate', 'scheduled', 'flexible'], example: 'scheduled' })
+  @IsOptional()
+  @IsString()
+  urgency?: 'immediate' | 'scheduled' | 'flexible';
 
   @ApiPropertyOptional({ description: 'Additional metadata', type: () => MetadataDto })
   @IsOptional()
