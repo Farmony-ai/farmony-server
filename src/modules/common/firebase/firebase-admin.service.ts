@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import 'firebase-admin/storage';
 import { Bucket } from '@google-cloud/storage';
 import * as path from 'path';
+import * as fs from 'fs';
 
 @Injectable()
 export class FirebaseAdminService implements OnModuleInit {
@@ -51,14 +52,22 @@ export class FirebaseAdminService implements OnModuleInit {
         const serviceAccountPath = this.configService.get<string>('FIREBASE_SERVICE_ACCOUNT_PATH');
         if (serviceAccountPath) {
             try {
-                // Resolve path relative to project root (process.cwd())
-                const absolutePath = path.isAbsolute(serviceAccountPath)
-                    ? serviceAccountPath
-                    : path.join(process.cwd(), serviceAccountPath);
+                // Resolve the absolute path relative to the project root
+                const projectRoot = path.resolve(__dirname, '../../../..');
+                const absolutePath = path.resolve(projectRoot, serviceAccountPath);
 
-                // eslint-disable-next-line @typescript-eslint/no-var-requires
-                const serviceAccount = require(absolutePath);
-                this.logger.log(`Initializing Firebase with service account file: ${absolutePath}`);
+                this.logger.log(`Attempting to load Firebase service account from: ${absolutePath}`);
+
+                // Check if file exists
+                if (!fs.existsSync(absolutePath)) {
+                    throw new Error(`Service account file not found at: ${absolutePath}`);
+                }
+
+                // Read and parse the JSON file
+                const serviceAccountContent = fs.readFileSync(absolutePath, 'utf8');
+                const serviceAccount = JSON.parse(serviceAccountContent);
+
+                this.logger.log('Initializing Firebase with service account file.');
                 return {
                     credential: admin.credential.cert(serviceAccount),
                     storageBucket,

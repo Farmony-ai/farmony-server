@@ -8,6 +8,7 @@ import { MarketplaceModule } from './modules/marketplace/marketplace.module';
 import { TransactionsModule } from './modules/transactions/transactions.module';
 import { EngagementModule } from './modules/engagement/engagement.module';
 import { ProvidersModule } from './modules/dashboard/providers/providers.module';
+import { SeekerModule } from './modules/dashboard/seekers/seekers.module';
 import databaseConfig from './modules/common/config/database.config';
 
 @Module({
@@ -31,6 +32,7 @@ import databaseConfig from './modules/common/config/database.config';
         TransactionsModule, // Service Requests, Orders
         EngagementModule, // Notifications
         ProvidersModule, // Dashboard - Provider view
+        SeekerModule, // Dashboard - Seeker view
     ],
 })
 export class AppModule {}

@@ -85,11 +85,17 @@ export class MatchesOrchestratorService {
         this.logger.log(`Processing wave ${waveNumber} for request ${requestId} with radius ${radius}m`);
 
         // Find providers in this radius who haven't been notified yet
+        // Extract ObjectId from populated fields (categoryId and subCategoryId might be populated objects)
+        const categoryIdString = (request.categoryId as any)?._id?.toString() || request.categoryId.toString();
+        const subCategoryIdString = request.subCategoryId
+            ? ((request.subCategoryId as any)?._id?.toString() || request.subCategoryId.toString())
+            : undefined;
+
         const candidates = await this.providerDiscoveryService.findCandidates({
             coordinates: request.location.coordinates,
             radiusMeters: radius,
-            categoryId: request.categoryId.toString(),
-            subCategoryId: request.subCategoryId?.toString(),
+            categoryId: categoryIdString,
+            subCategoryId: subCategoryIdString,
             excludeProviderIds: ((request as any).lifecycle?.matching?.allNotifiedProviders ?? []).map((id: any) => id.toString()),
         });
 

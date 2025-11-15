@@ -3,6 +3,9 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { UsersService } from '../services/users.service';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import { UpdatePreferencesDto } from '../dto/update-preferences.dto';
+import { CreateAddressDto } from '../dto/create-address.dto';
+import { UpdateAddressDto } from '../dto/update-address.dto';
+import { SetDefaultAddressDto } from '../dto/set-default-address.dto';
 import { CurrentUser } from '../decorators/current-user.decorator';
 import { ApiTags, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { memoryStorage } from 'multer';
@@ -27,6 +30,8 @@ export class UsersController {
             preferences: user.preferences,
             // Also expose defaultAddressId for completeness
             defaultAddressId: user.defaultAddressId,
+            // Include addresses array
+            addresses: user.addresses || [],
             // Include profile picture URL
             profilePictureUrl: user.profilePictureUrl,
         };
@@ -224,6 +229,71 @@ export class UsersController {
 
         return {
             message: 'FCM token removed successfully',
+        };
+    }
+
+    // ==========================================
+    // ADDRESS MANAGEMENT ENDPOINTS
+    // ==========================================
+
+    @Get(':id/addresses')
+    @ApiOperation({ summary: 'Get all addresses for a user' })
+    async getUserAddresses(@Param('id') userId: string) {
+        const addresses = await this.usersService.getUserAddresses(userId);
+        return {
+            addresses,
+        };
+    }
+
+    @Get(':userId/addresses/:addressId')
+    @ApiOperation({ summary: 'Get a specific address' })
+    async getAddress(@Param('userId') userId: string, @Param('addressId') addressId: string) {
+        const address = await this.usersService.getAddressById(userId, addressId);
+        return {
+            address,
+        };
+    }
+
+    @Post(':id/addresses')
+    @ApiOperation({ summary: 'Create a new address for a user' })
+    async createAddress(@Param('id') userId: string, @Body() createAddressDto: CreateAddressDto) {
+        const address = await this.usersService.createAddress(userId, createAddressDto);
+        return {
+            message: 'Address created successfully',
+            address,
+        };
+    }
+
+    @Patch(':userId/addresses/:addressId')
+    @ApiOperation({ summary: 'Update an existing address' })
+    async updateAddress(
+        @Param('userId') userId: string,
+        @Param('addressId') addressId: string,
+        @Body() updateAddressDto: UpdateAddressDto
+    ) {
+        const address = await this.usersService.updateAddress(userId, addressId, updateAddressDto);
+        return {
+            message: 'Address updated successfully',
+            address,
+        };
+    }
+
+    @Delete(':userId/addresses/:addressId')
+    @ApiOperation({ summary: 'Delete an address' })
+    async deleteAddress(@Param('userId') userId: string, @Param('addressId') addressId: string) {
+        await this.usersService.deleteAddress(userId, addressId);
+        return {
+            message: 'Address deleted successfully',
+        };
+    }
+
+    @Patch(':id/default-address')
+    @ApiOperation({ summary: 'Set an address as default' })
+    async setDefaultAddress(@Param('id') userId: string, @Body() setDefaultAddressDto: SetDefaultAddressDto) {
+        const user = await this.usersService.setDefaultAddressById(userId, setDefaultAddressDto.addressId);
+        return {
+            message: 'Default address updated successfully',
+            defaultAddressId: user.defaultAddressId,
         };
     }
 }

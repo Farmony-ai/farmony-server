@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Types } from 'mongoose';
+import { Document, Types, Schema as MongooseSchema } from 'mongoose';
 import { pointDefinition } from '../../common/geo/geo.types';
 import { GeoPointDto } from '@common/geo/geo.dto';
 
@@ -71,8 +71,11 @@ export class Address {
     @Prop({ type: String })
     pincode?: string;
 
-    @Prop({ type: pointDefinition })
-    location?: GeoPointDto;
+    @Prop({ type: MongooseSchema.Types.Mixed })
+    location?: {
+        type: 'Point';
+        coordinates: [number, number];
+    };
 
     @Prop({ type: Number })
     accuracy?: number;
