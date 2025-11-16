@@ -26,6 +26,10 @@ export class UsersController {
             role: user.role,
             isVerified: user.isVerified,
             kycStatus: user.kycStatus,
+            gender: user.gender,
+            dateOfBirth: user.dateOfBirth,
+            bio: user.bio,
+            occupation: user.occupation,
             // Expose user preferences so frontend can render and manage them
             preferences: user.preferences,
             // Also expose defaultAddressId for completeness
@@ -60,6 +64,10 @@ export class UsersController {
                 role: user.role,
                 isVerified: user.isVerified,
                 kycStatus: user.kycStatus,
+                gender: user.gender,
+                dateOfBirth: user.dateOfBirth,
+                bio: user.bio,
+                occupation: user.occupation,
             },
         };
     }
@@ -71,6 +79,14 @@ export class UsersController {
         return {
             message: 'Preferences updated successfully',
             preferences: user.preferences,
+            user: {
+                id: user._id,
+                name: user.name,
+                email: user.email,
+                phone: user.phone,
+                role: user.role,
+                preferences: user.preferences,
+            },
         };
     }
 

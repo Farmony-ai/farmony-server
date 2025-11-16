@@ -100,7 +100,7 @@ export class MatchesOrchestratorService {
         });
 
         if (candidates.length < WAVE_CONFIG.minProvidersPerWave) {
-            // Not enough new providers in this wave, try next wave immediately
+            // Not enough new providers in this wave, schedule next wave with delay
             if (currentWave >= WAVE_CONFIG.maxWaves - 1) {
                 await this.handleNoProvidersAvailable(request);
                 return {
@@ -109,12 +109,23 @@ export class MatchesOrchestratorService {
                     nextWaveScheduled: false,
                 };
             } else {
+                // Schedule next wave with delay
+                const nextWaveAt = new Date();
+                nextWaveAt.setMinutes(nextWaveAt.getMinutes() + WAVE_CONFIG.waveDelayMinutes);
+
                 (request as any).lifecycle = (request as any).lifecycle || {};
                 (request as any).lifecycle.matching = (request as any).lifecycle.matching || {};
-                (request as any).lifecycle.matching.currentWave = currentWave + 1;
+                (request as any).lifecycle.matching.currentWave = waveNumber;
+                (request as any).lifecycle.matching.nextWaveAt = nextWaveAt;
                 await request.save();
-                this.logger.log(`Insufficient providers in wave ${waveNumber}, advancing to wave ${(request as any).lifecycle.matching.currentWave + 1}`);
-                return this.processNextWave(requestId);
+
+                this.logger.log(`Insufficient providers in wave ${waveNumber}, scheduling wave ${waveNumber + 1} for ${nextWaveAt.toISOString()}`);
+                return {
+                    waveNumber,
+                    providersNotified: 0,
+                    nextWaveScheduled: true,
+                    nextWaveAt,
+                };
             }
         }
 

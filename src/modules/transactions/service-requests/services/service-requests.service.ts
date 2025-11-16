@@ -230,18 +230,14 @@ export class ServiceRequestsService {
             .populate('subCategoryId', 'name')
             .populate('lifecycle.order.providerId', 'name phone profilePicture')
             .populate('lifecycle.order.listingId', 'title price unitOfMeasure')
-            .populate('serviceAddressId')
             .lean();
 
         if (!request) {
             throw new NotFoundException('Service request not found');
         }
 
-        // Add formatted address string from serviceAddressId
-        if (request.serviceAddressId && typeof request.serviceAddressId === 'object') {
-            const addr = request.serviceAddressId as any;
-            request.address = [addr.addressLine1, addr.addressLine2, addr.village, addr.district, addr.state, addr.pincode].filter(Boolean).join(', ');
-        }
+        // Note: serviceAddressId references an embedded Address in User.addresses array
+        // Cannot populate embedded documents, address string should be set during creation
 
         return request;
     }
@@ -276,7 +272,6 @@ export class ServiceRequestsService {
                 .populate('seekerId', 'name phone email')
                 .populate('categoryId', 'name icon')
                 .populate('subCategoryId', 'name')
-                .populate('serviceAddressId')
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
@@ -284,12 +279,9 @@ export class ServiceRequestsService {
             this.serviceRequestModel.countDocuments(query),
         ]);
 
-        // Add formatted address strings
+        // Note: serviceAddressId references embedded Address in User.addresses array
+        // Cannot populate embedded documents, address string should be set during creation
         const requestsWithAddresses = requests.map((request) => {
-            if (request.serviceAddressId && typeof request.serviceAddressId === 'object') {
-                const addr = request.serviceAddressId as any;
-                (request as any).address = [addr.addressLine1, addr.addressLine2, addr.village, addr.district, addr.state, addr.pincode].filter(Boolean).join(', ');
-            }
             return request;
         });
 

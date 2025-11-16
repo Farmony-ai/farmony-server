@@ -105,10 +105,9 @@ export class ListingsService {
 
         const saved = await listing.save();
 
-        // Return with populated address
-        const populated = await this.listingModel.findById(saved._id).populate('serviceAddressId').exec();
-
-        return this.transformWithPublicUrls(populated);
+        // Note: serviceAddressId references embedded Address in User.addresses array
+        // Cannot populate embedded documents
+        return this.transformWithPublicUrls(saved);
     }
 
     async findAll(filters?: SearchFilters): Promise<any[]> {

@@ -154,6 +154,18 @@ export class User {
     @Prop({ type: String })
     profilePictureKey?: string;
 
+    @Prop({ type: String, enum: ['male', 'female', 'other'] })
+    gender?: string;
+
+    @Prop({ type: Date })
+    dateOfBirth?: Date;
+
+    @Prop({ type: String })
+    bio?: string;
+
+    @Prop({ type: String })
+    occupation?: string;
+
     @Prop({ type: String, required: true, enum: ['individual', 'SHG', 'FPO', 'admin'], default: 'individual' })
     role: string;
 

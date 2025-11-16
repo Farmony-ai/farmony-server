@@ -25,7 +25,7 @@ import databaseConfig from './modules/common/config/database.config';
                 uri: process.env.NODE_ENV === 'prod' ? cfg.get<string>('MONGO_URI_PROD') : cfg.get<string>('MONGO_URI_DEV'),
             }),
         }),
-        // ScheduleModule.forRoot(), // For cron jobs
+        ScheduleModule.forRoot(), // For cron jobs (wave processing, expiry checks)
         CommonModule, // Provides Firebase, Storage, and stub services
         IdentityModule, // Users and authentication
         MarketplaceModule, // Listings, Matches, Catalogue

@@ -1,4 +1,4 @@
-import { IsBoolean, IsOptional, IsString, IsIn, IsMongoId, ValidateNested, IsEmail } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, IsIn, IsMongoId, ValidateNested, IsEmail, IsDateString } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { UpdatePreferencesDto } from './update-preferences.dto';
@@ -19,6 +19,27 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @ApiPropertyOptional({ description: 'Gender', enum: ['male', 'female', 'other'], example: 'male' })
+  @IsOptional()
+  @IsString()
+  @IsIn(['male', 'female', 'other'])
+  gender?: string;
+
+  @ApiPropertyOptional({ description: 'Date of birth', example: '1990-01-15' })
+  @IsOptional()
+  @IsDateString()
+  dateOfBirth?: string;
+
+  @ApiPropertyOptional({ description: 'User bio', example: 'Experienced farmer with 10 years in organic farming' })
+  @IsOptional()
+  @IsString()
+  bio?: string;
+
+  @ApiPropertyOptional({ description: 'User occupation', example: 'Farmer' })
+  @IsOptional()
+  @IsString()
+  occupation?: string;
 
   @ApiPropertyOptional({ description: 'Is user verified', example: true })
   @IsOptional()

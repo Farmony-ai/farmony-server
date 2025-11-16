@@ -1,5 +1,6 @@
 import { IsString, IsEnum, IsBoolean, IsOptional } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 
 export class UpdatePreferencesDto {
   @ApiPropertyOptional({
@@ -7,11 +8,13 @@ export class UpdatePreferencesDto {
     enum: ['provider', 'seeker'],
     example: 'provider'
   })
+  @Transform(({ value }) => value?.toLowerCase())
   @IsEnum(['provider', 'seeker'])
   @IsOptional()
   defaultLandingPage?: string;
 
   @ApiPropertyOptional({ description: 'Default provider tab', example: 'listings' })
+  @Transform(({ value }) => value?.toLowerCase())
   @IsString()
   @IsOptional()
   defaultProviderTab?: string;
