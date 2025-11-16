@@ -3,7 +3,7 @@ import { Document, Types, Schema as MongooseSchema } from 'mongoose';
 import { pointDefinition } from '../../common/geo/geo.types';
 import { GeoPointDto } from '@common/geo/geo.dto';
 
-export type UserDocument = User & Document;
+export type UserDocument = User & Document & { _id: Types.ObjectId };
 
 @Schema({ _id: false })
 export class UserPreferences {

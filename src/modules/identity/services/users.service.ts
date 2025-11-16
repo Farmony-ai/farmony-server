@@ -56,7 +56,7 @@ export class UsersService {
         };
     }
 
-    async updatePreferences(userId: string, dto: UpdatePreferencesDto): Promise<User> {
+    async updatePreferences(userId: string, dto: UpdatePreferencesDto): Promise<UserDocument> {
         const user = await this.findById(userId);
 
         if (!user.preferences) {
@@ -80,7 +80,7 @@ export class UsersService {
         return user.save();
     }
 
-    async setDefaultAddress(userId: string, addressId: string): Promise<User> {
+    async setDefaultAddress(userId: string, addressId: string): Promise<UserDocument> {
         const user = await this.findById(userId);
         if (!Types.ObjectId.isValid(addressId)) {
             throw new BadRequestException('Invalid address ID');

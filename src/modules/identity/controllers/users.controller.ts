@@ -185,6 +185,8 @@ export class UsersController {
         try {
             const { user, url } = await this.usersService.uploadProfilePicture(userId, file);
 
+            console.log('[UsersController] Profile picture uploaded. URL:', url);
+
             return {
                 message: 'Profile picture uploaded successfully',
                 profilePictureUrl: url,
