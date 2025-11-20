@@ -4,6 +4,7 @@ dist/
 .env.prod
 .env
 .env.*
+.env*.local
 .DS_Store
 config/
 *.log
@@ -15,3 +16,4 @@ build/
 coverage/
 Thumbs.db
 farmony-firebase-key.json
+do-app.yaml

@@ -1,0 +1,44 @@
+name: farmony-api
+services:
+  - name: api
+    git:
+      repo_clone_url: "https://github.com/Farmony-ai/farmony-server.git"
+      branch: "feat/FAR-9"
+      deploy_on_push: false
+    environment_slug: node-js
+    instance_size_slug: basic-xxs
+    instance_count: 1
+    source_dir: .
+    build_command: npm ci && npm run build
+    run_command: npm run start
+    http_port: 3000
+    routes:
+      - path: /
+    envs:
+      - key: NODE_ENV
+        value: prod
+        type: GENERAL
+      - key: PORT
+        value: "3000"
+        type: GENERAL
+      - key: MONGO_URI_PROD
+        value: "mongodb+srv://safarmonydbuser:<db_password>@farmony.vkdprpx.mongodb.net/?appName=farmony"
+        type: SECRET
+      - key: GOOGLE_MAPS_API_KEY
+        value: "<google_maps_api_key>"
+        type: SECRET
+      - key: FIREBASE_PROJECT_ID
+        value: "farmony-8e5ec"
+        type: GENERAL
+      - key: FIREBASE_CLIENT_EMAIL
+        value: "firebase-adminsdk-fbsvc@farmony-8e5ec.iam.gserviceaccount.com"
+        type: GENERAL
+      - key: FIREBASE_PRIVATE_KEY
+        value: "-----BEGIN PRIVATE KEY-----\\n<replace_with_escaped_key>\\n-----END PRIVATE KEY-----\\n"
+        type: SECRET
+      - key: FIREBASE_STORAGE_BUCKET
+        value: "farmony-8e5ec.firebasestorage.app"
+        type: GENERAL
+      - key: ENABLE_SWAGGER
+        value: "true"
+        type: GENERAL
