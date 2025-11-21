@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { RouterModule } from '@nestjs/core';
 import { IdentityModule } from './modules/identity/identity.module';
 import { CommonModule } from './modules/common/common.module';
 import { MarketplaceModule } from './modules/marketplace/marketplace.module';
@@ -33,6 +34,13 @@ import databaseConfig from './modules/common/config/database.config';
         EngagementModule, // Notifications
         ProvidersModule, // Dashboard - Provider view
         SeekerModule, // Dashboard - Seeker view
+        // Add module-level route prefixes
+        RouterModule.register([
+            {
+                path: 'identity',
+                module: IdentityModule,
+            },
+        ]),
     ],
 })
 export class AppModule {}

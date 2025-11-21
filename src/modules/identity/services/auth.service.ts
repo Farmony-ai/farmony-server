@@ -37,7 +37,7 @@ export class AuthService {
                 user = await this.usersService.create({
                     phone: phoneNumber,
                     name: dto.name || 'User',
-                    email: decodedToken.email,
+                    email: dto.email || decodedToken.email, // Prefer DTO email, fallback to token
                 });
             } else {
                 // Existing user - mark as verified if not already

@@ -12,10 +12,10 @@ export class VerifyFirebaseTokenDto {
 
     @ApiProperty({
         description: 'Phone number with country code',
-        example: '+1234567890',
+        example: '+919876543210',
         required: false,
     })
-    @IsPhoneNumber('IN')
+    @IsString()
     @IsOptional()
     phoneNumber?: string;
 
@@ -27,4 +27,13 @@ export class VerifyFirebaseTokenDto {
     @IsString()
     @IsOptional()
     name?: string;
+
+    @ApiProperty({
+        description: 'Email address for new registrations',
+        example: 'john.doe@example.com',
+        required: false,
+    })
+    @IsString()
+    @IsOptional()
+    email?: string;
 }
