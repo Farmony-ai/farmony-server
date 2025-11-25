@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
-import { EmbeddedAddressDto } from '@common/geo/geo.dto';
+import { EmbeddedAddressDto } from '../../../common/geo/geo.dto';
 
 export type OrderDocument = Order & Document;
 

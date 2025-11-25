@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { OrdersService } from '@transactions/service-requests/services/orders.service';
-import { ServiceRequestsService } from '@transactions/service-requests/services/service-requests.service';
+import { OrdersService } from '../../transactions/service-requests/services/orders.service';
+import { ServiceRequestsService } from '../../transactions/service-requests/services/service-requests.service';
 import { UnifiedBookingDto } from './dto/unified-booking.dto';
 
 @Injectable()

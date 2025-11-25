@@ -1,11 +1,11 @@
 // src/modules/providers/providers.service.ts
 import { Injectable, Inject, forwardRef } from '@nestjs/common';
-import { OrdersService } from '@transactions/service-requests/services/orders.service';
-import { ListingsService } from '@marketplace/listings/services/listings.service';
+import { OrdersService } from '../../transactions/service-requests/services/orders.service';
+import { ListingsService } from '../../marketplace/listings/services/listings.service';
 import { Types } from 'mongoose';
-import { UsersService } from '@identity/services/users.service';
-import { ServiceRequestsService } from '@transactions/service-requests/services/service-requests.service';
-import { UpdatePreferencesDto } from '@identity/dto/update-preferences.dto';
+import { UsersService } from '../../identity/services/users.service';
+import { ServiceRequestsService } from '../../transactions/service-requests/services/service-requests.service';
+import { UpdatePreferencesDto } from '../../identity/dto/update-preferences.dto';
 
 @Injectable()
 export class ProvidersService {

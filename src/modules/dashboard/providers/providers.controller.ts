@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
 import { ProvidersService } from './providers.service';
-import { UpdatePreferencesDto } from '@identity/dto/update-preferences.dto';
-import { FirebaseAuthGuard } from '@identity/guards/firebase-auth.guard';
+import { UpdatePreferencesDto } from '../../identity/dto/update-preferences.dto';
+import { FirebaseAuthGuard } from '../../identity/guards/firebase-auth.guard';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 
 @ApiTags('Providers')

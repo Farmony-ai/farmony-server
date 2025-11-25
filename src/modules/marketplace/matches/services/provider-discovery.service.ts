@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Listing, ListingDocument } from '@marketplace/listings/schemas/listings.schema';
-import { metersToKm, calculateDistance } from '@common/geo/geo.utils';
+import { Listing, ListingDocument } from '../../listings/schemas/listings.schema';
+import { metersToKm, calculateDistance } from '../../../common/geo/geo.utils';
 
 export interface ProviderCandidate {
     providerId: string;

@@ -4,7 +4,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { FirebaseAdminService } from './firebase/firebase-admin.service';
 import { FirebaseStorageService } from './firebase/firebase-storage.service';
 import { GeoService } from './geo/geo.service';
-import { User, UserSchema } from '@identity/schemas/users.schema';
+import { User, UserSchema } from '../identity/schemas/users.schema';
 
 @Module({
     imports: [

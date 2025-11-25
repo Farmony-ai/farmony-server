@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { FirebaseAdminService } from '@common/firebase/firebase-admin.service';
-import { UsersService } from '@identity/services/users.service';
+import { FirebaseAdminService } from '../../../common/firebase/firebase-admin.service';
+import { FcmTokenService } from '../../../identity/services/fcm-token.service';
 import {
     ServiceRequestNotificationPayload,
     ServiceRequestAcceptedPayload,
@@ -26,7 +26,7 @@ export class NotificationService {
 
     constructor(
         private readonly firebaseAdmin: FirebaseAdminService,
-        private readonly usersService: UsersService
+        private readonly fcmTokenService: FcmTokenService,
     ) {}
 
     /**
@@ -40,7 +40,7 @@ export class NotificationService {
 
         try {
             // Get FCM tokens for all providers
-            const tokenMap = await this.usersService.getFcmTokensForUsers(providerIds);
+            const tokenMap = await this.fcmTokenService.getTokensForUsers(providerIds);
 
             const allTokens: string[] = [];
             tokenMap.forEach((tokens) => {
@@ -78,7 +78,7 @@ export class NotificationService {
      */
     async notifySeekerAccepted(seekerId: string, payload: ServiceRequestAcceptedPayload): Promise<void> {
         try {
-            const tokens = await this.usersService.getFcmTokens(seekerId);
+            const tokens = await this.fcmTokenService.getTokens(seekerId);
 
             if (tokens.length === 0) {
                 this.logger.warn(`No FCM tokens found for seeker ${seekerId}`);
@@ -114,7 +114,7 @@ export class NotificationService {
         }
 
         try {
-            const tokenMap = await this.usersService.getFcmTokensForUsers(providerIds);
+            const tokenMap = await this.fcmTokenService.getTokensForUsers(providerIds);
 
             const allTokens: string[] = [];
             tokenMap.forEach((tokens) => {
@@ -156,7 +156,7 @@ export class NotificationService {
      */
     async notifySeekerNoProviders(seekerId: string, requestId: string): Promise<void> {
         try {
-            const tokens = await this.usersService.getFcmTokens(seekerId);
+            const tokens = await this.fcmTokenService.getTokens(seekerId);
 
             if (tokens.length === 0) {
                 this.logger.warn(`No FCM tokens found for seeker ${seekerId}`);
@@ -186,7 +186,7 @@ export class NotificationService {
      */
     async notifySeekerExpired(seekerId: string, requestId: string): Promise<void> {
         try {
-            const tokens = await this.usersService.getFcmTokens(seekerId);
+            const tokens = await this.fcmTokenService.getTokens(seekerId);
 
             if (tokens.length === 0) {
                 this.logger.warn(`No FCM tokens found for seeker ${seekerId}`);

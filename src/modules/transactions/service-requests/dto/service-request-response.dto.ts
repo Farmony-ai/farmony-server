@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ServiceRequestStatus } from '../schemas/service-request.entity';
-import { GeoPointDto } from '@common/geo/geo.dto';
+import { GeoPointDto } from '../../../common/geo/geo.dto';
 
 export class NotificationWaveDto {
   @ApiProperty() waveNumber: number;

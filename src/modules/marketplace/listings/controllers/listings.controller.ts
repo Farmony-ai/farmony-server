@@ -4,7 +4,7 @@ import { ListingsService } from '../services/listings.service';
 import { CreateListingDto } from '../dto/create-listing.dto';
 import { UpdateListingDto } from '../dto/update-listing.dto';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import { FirebaseAuthGuard } from '@identity/guards/firebase-auth.guard';
+import { FirebaseAuthGuard } from '../../../identity/guards/firebase-auth.guard';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 
 @ApiTags('Listings')

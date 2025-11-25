@@ -1,7 +1,8 @@
-import { Injectable, UnauthorizedException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { FirebaseAdminService } from '../../common/firebase/firebase-admin.service';
-import { VerifyFirebaseTokenDto } from '../dto/verify-firebase-token.dto';
+import { RegisterDto } from '../dto/register.dto';
+import { LoginDto } from '../dto/login.dto';
 
 @Injectable()
 export class AuthService {
@@ -10,56 +11,45 @@ export class AuthService {
     constructor(private readonly usersService: UsersService, private readonly firebaseAdmin: FirebaseAdminService) {}
 
     /**
-     * Main authentication flow:
-     * 1. Verify Firebase ID token (proves user completed OTP)
-     * 2. Get or create user in MongoDB
-     * 3. Generate custom Firebase token with RBAC claims
-     * 4. Return custom token + user data to client
+     * Register a new user:
+     * 1. Verify Firebase ID token
+     * 2. Check user doesn't already exist
+     * 3. Create user in MongoDB
+     * 4. Return custom token with RBAC claims
      */
-    async firebaseLogin(dto: VerifyFirebaseTokenDto) {
+    async register(dto: RegisterDto) {
         try {
-            // Step 1: Verify Firebase ID token
             const decodedToken = await this.firebaseAdmin.verifyIdToken(dto.idToken);
 
-            const phoneNumber = decodedToken.phone_number || dto.phoneNumber;
-            if (!phoneNumber) {
-                throw new BadRequestException('Phone number is required');
+            const firebaseUserId = decodedToken.uid;
+            const phone = decodedToken.phone_number;
+            const email = dto.email || decodedToken.email;
+
+            this.logger.log(`Registration attempt for Firebase UID: ${firebaseUserId}`);
+
+            // Check if user already exists
+            const existingUser = await this.usersService.findByFirebaseUserId(firebaseUserId);
+            if (existingUser) {
+                throw new BadRequestException('User already registered. Please login instead.');
             }
 
-            this.logger.log(`Firebase token verified for phone: ${phoneNumber}`);
+            // Create new user
+            const user = await this.usersService.create({
+                firebaseUserId,
+                phone,
+                name: dto.name,
+                email,
+            });
 
-            // Step 2: Find or create user in MongoDB
-            let user = await this.usersService.findByPhone(phoneNumber);
+            this.logger.log(`New user created: ${user._id}`);
 
-            if (!user) {
-                // New user - create in MongoDB
-                this.logger.log(`Creating new user for phone: ${phoneNumber}`);
-                user = await this.usersService.create({
-                    phone: phoneNumber,
-                    name: dto.name || 'User',
-                    email: dto.email || decodedToken.email, // Prefer DTO email, fallback to token
-                });
-            } else {
-                // Existing user - mark as verified if not already
-                if (!user.isVerified) {
-                    user.isVerified = true;
-                    await user.save();
-                    this.logger.log(`User ${user._id} marked as verified`);
-                }
-            }
-
-            // Step 3: Determine RBAC roles
+            // Generate custom token with RBAC claims
             const rbacClaims = this.buildRbacClaims(user);
-
-            // Step 4: Generate custom Firebase token with RBAC claims
             const customToken = await this.firebaseAdmin.createCustomToken(
-                user._id.toString(), // Use MongoDB ID as Firebase UID
+                user._id.toString(),
                 rbacClaims
             );
 
-            this.logger.log(`Custom token generated for user ${user._id} with role: ${user.role}`);
-
-            // Step 5: Return response
             return {
                 success: true,
                 customToken,
@@ -71,16 +61,76 @@ export class AuthService {
                     role: user.role,
                     isVerified: user.isVerified,
                     kycStatus: user.kycStatus,
-                    ...rbacClaims, // Include claims in response
+                    ...rbacClaims,
                 },
-                message: 'Authentication successful',
+                message: 'Registration successful',
             };
         } catch (error) {
-            this.logger.error('Firebase login failed:', error);
-            if (error instanceof BadRequestException || error instanceof UnauthorizedException) {
+            this.logger.error('Registration failed:', error);
+            if (error instanceof BadRequestException) {
                 throw error;
             }
-            throw new UnauthorizedException('Authentication failed');
+            throw new UnauthorizedException('Registration failed: Invalid token');
+        }
+    }
+
+    /**
+     * Login existing user:
+     * 1. Verify Firebase ID token
+     * 2. Find user by firebaseUserId
+     * 3. Return custom token with RBAC claims
+     */
+    async login(dto: LoginDto) {
+        try {
+            const decodedToken = await this.firebaseAdmin.verifyIdToken(dto.idToken);
+
+            const firebaseUserId = decodedToken.uid;
+
+            this.logger.log(`Login attempt for Firebase UID: ${firebaseUserId}`);
+
+            // Find existing user
+            const user = await this.usersService.findByFirebaseUserId(firebaseUserId);
+            if (!user) {
+                throw new NotFoundException('User not registered. Please register first.');
+            }
+
+            // Mark as verified if not already
+            if (!user.isVerified) {
+                user.isVerified = true;
+                await user.save();
+                this.logger.log(`User ${user._id} marked as verified`);
+            }
+
+            // Generate custom token with RBAC claims
+            const rbacClaims = this.buildRbacClaims(user);
+            const customToken = await this.firebaseAdmin.createCustomToken(
+                user._id.toString(),
+                rbacClaims
+            );
+
+            this.logger.log(`Login successful for user ${user._id}`);
+
+            return {
+                success: true,
+                customToken,
+                user: {
+                    id: user._id,
+                    name: user.name,
+                    email: user.email,
+                    phone: user.phone,
+                    role: user.role,
+                    isVerified: user.isVerified,
+                    kycStatus: user.kycStatus,
+                    ...rbacClaims,
+                },
+                message: 'Login successful',
+            };
+        } catch (error) {
+            this.logger.error('Login failed:', error);
+            if (error instanceof NotFoundException) {
+                throw error;
+            }
+            throw new UnauthorizedException('Login failed: Invalid token');
         }
     }
 

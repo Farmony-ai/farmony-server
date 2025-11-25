@@ -1,7 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types, Schema as MongooseSchema } from 'mongoose';
 import { pointDefinition } from '../../common/geo/geo.types';
-import { GeoPointDto } from '@common/geo/geo.dto';
+import { GeoPointDto } from '../../common/geo/geo.dto';
 
 export type UserDocument = User & Document & { _id: Types.ObjectId };
 
@@ -35,11 +35,13 @@ export enum AddressType {
     WAREHOUSE = 'warehouse',
     SERVICE_AREA = 'service_area',
     DELIVERY_POINT = 'delivery_point',
-    MEETING_SPOT = 'meeting_spot'
+    MEETING_SPOT = 'meeting_spot',
 }
 
 @Schema({ _id: true, timestamps: true })
 export class Address {
+    _id?: Types.ObjectId;
+
     @Prop({
         type: String,
         enum: Object.values(AddressType),
@@ -148,8 +150,11 @@ export class User {
     @Prop({ type: String })
     email?: string;
 
-    @Prop({ type: String, required: true, index: true })
-    phone: string;
+    @Prop({ type: String, index: true })
+    phone?: string;
+
+    @Prop({ type: String, required: true, unique: true, index: true })
+    firebaseUserId: string;
 
     @Prop({ type: String })
     profilePictureKey?: string;

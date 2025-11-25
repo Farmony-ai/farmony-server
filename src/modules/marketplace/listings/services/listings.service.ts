@@ -5,11 +5,11 @@ import { Model, Types } from 'mongoose';
 import { Listing, ListingDocument } from '../schemas/listings.schema';
 import { CreateListingDto } from '../dto/create-listing.dto';
 import { UpdateListingDto } from '../dto/update-listing.dto';
-import { FirebaseStorageService } from '@common/firebase/firebase-storage.service';
-import { UsersService } from '@identity/services/users.service';
-import { GeoService } from '@common/geo/geo.service';
+import { FirebaseStorageService } from '../../../common/firebase/firebase-storage.service';
+import { UsersService } from '../../../identity/services/users.service';
+import { GeoService } from '../../../common/geo/geo.service';
 import { Catalogue, CatalogueDocument } from '../../catalogue/schemas/catalogue.schema';
-import { AddressType } from '@identity/schemas/users.schema';
+import { AddressType } from '../../../identity/schemas/users.schema';
 
 export interface SearchFilters {
     categoryId?: string;

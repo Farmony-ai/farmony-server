@@ -1,7 +1,7 @@
 // src/modules/service-requests/entities/service-request.entity.ts
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
-import { GeoPointDto } from '@common/geo/geo.dto';
+import { GeoPointDto } from '../../../common/geo/geo.dto';
 import { v4 as uuidv4 } from 'uuid';
 
 export type ServiceRequestDocument = ServiceRequest & Document;

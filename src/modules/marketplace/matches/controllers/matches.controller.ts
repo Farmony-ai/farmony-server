@@ -2,7 +2,7 @@ import { Body, Controller, Headers, Post, UseGuards, Request, Get, Param } from 
 import { ApiTags, ApiOperation, ApiHeader, ApiBearerAuth } from '@nestjs/swagger';
 import { CreateMatchDto } from '../dto/create-match.dto';
 import { MatchesService } from '../services/matches.service';
-import { FirebaseAuthGuard } from '@identity/guards/firebase-auth.guard';
+import { FirebaseAuthGuard } from '../../../identity/guards/firebase-auth.guard';
 
 @ApiTags('matches')
 @Controller('matches')

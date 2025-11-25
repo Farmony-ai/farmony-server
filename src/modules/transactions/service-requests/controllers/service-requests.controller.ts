@@ -2,8 +2,8 @@ import { Controller, Get, Post, Body, Param, Patch, UseGuards, Request, Query, H
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ServiceRequestsService } from '../services/service-requests.service';
 import { CreateServiceRequestDto, UpdateServiceRequestDto, AcceptServiceRequestDto, DeclineServiceRequestDto, ServiceRequestFiltersDto } from '../dto';
-import { FirebaseAuthGuard } from '@identity/guards/firebase-auth.guard';
-import { FirebaseStorageService } from '@common/firebase/firebase-storage.service';
+import { FirebaseAuthGuard } from '../../../identity/guards/firebase-auth.guard';
+import { FirebaseStorageService } from '../../../common/firebase/firebase-storage.service';
 import { ApiTags, ApiOperation, ApiConsumes, ApiBody, ApiOkResponse, ApiCreatedResponse } from '@nestjs/swagger';
 import { ServiceRequestStatusDto } from '../dto/service-request-status.dto';
 import { AcceptServiceRequestResponseDto, PaginatedServiceRequestsDto, ServiceRequestResponseDto } from '../dto/service-request-response.dto';

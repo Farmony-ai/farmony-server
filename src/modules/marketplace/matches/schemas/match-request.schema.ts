@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
-import { GeoPointDto } from '@common/geo/geo.dto';
+import { GeoPointDto } from '../../../common/geo/geo.dto';
 
 export type MatchRequestDocument = MatchRequest & Document;
 

@@ -2,12 +2,12 @@ import { Injectable, BadRequestException, NotFoundException } from '@nestjs/comm
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { randomUUID } from 'crypto';
-import { User, UserDocument } from '@identity/schemas/users.schema';
+import { User, UserDocument } from '../../../identity/schemas/users.schema';
 import { Catalogue, CatalogueDocument } from '../../catalogue/schemas/catalogue.schema';
 import { MatchRequest, MatchRequestDocument } from '../schemas/match-request.schema';
 import { MatchCandidate, MatchCandidateDocument } from '../schemas/match-candidate.schema';
 import { CreateMatchDto } from '../dto/create-match.dto';
-import { FirebaseStorageService } from '@common/firebase/firebase-storage.service';
+import { FirebaseStorageService } from '../../../common/firebase/firebase-storage.service';
 import { ProviderDiscoveryService } from './provider-discovery.service';
 
 export type MatchResponse = {

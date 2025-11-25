@@ -2,9 +2,9 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { ServiceRequest, ServiceRequestDocument, ServiceRequestStatus } from '@transactions/service-requests/schemas/service-request.entity';
+import { ServiceRequest, ServiceRequestDocument, ServiceRequestStatus } from '../../../transactions/service-requests/schemas/service-request.entity';
 import { MatchesOrchestratorService } from './matches-orchestrator.service';
-import { WAVE_CONFIG } from '@common/config/waves.config';
+import { WAVE_CONFIG } from '../../../common/config/waves.config';
 
 /**
  * WaveSchedulerService manages cron-based scheduling of wave processing and request expiration

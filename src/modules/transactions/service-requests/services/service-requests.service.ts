@@ -7,12 +7,12 @@ import { ServiceRequest, ServiceRequestDocument, ServiceRequestStatus, Notificat
 import { CreateServiceRequestDto } from '../dto/create-service-request.dto';
 import { UpdateServiceRequestDto } from '../dto/update-service-request.dto';
 import { AcceptServiceRequestDto } from '../dto/accept-service-request.dto';
-import { ListingsService } from '@marketplace/listings/services/listings.service';
+import { ListingsService } from '../../../marketplace/listings/services/listings.service';
 import { OrdersService } from './orders.service';
-import { WAVE_CONFIG } from '@common/config/waves.config';
-import { GeoService } from '@common/geo/geo.service';
-import { NotificationService } from '@engagement/notifications/services/notification.service';
-import { MatchesOrchestratorService } from '@marketplace/matches/services/matches-orchestrator.service';
+import { WAVE_CONFIG } from '../../../common/config/waves.config';
+import { GeoService } from '../../../common/geo/geo.service';
+import { NotificationService } from '../../../engagement/notifications/services/notification.service';
+import { MatchesOrchestratorService } from '../../../marketplace/matches/services/matches-orchestrator.service';
 
 @Injectable()
 export class ServiceRequestsService {

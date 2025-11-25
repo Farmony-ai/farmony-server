@@ -1,6 +1,6 @@
 import { Controller, Get, Param, UseGuards, Request, UnauthorizedException } from '@nestjs/common';
 import { SeekerService } from './seeker.service';
-import { FirebaseAuthGuard } from '@identity/guards/firebase-auth.guard';
+import { FirebaseAuthGuard } from '../../identity/guards/firebase-auth.guard';
 
 @Controller('seeker')
 @UseGuards(FirebaseAuthGuard)

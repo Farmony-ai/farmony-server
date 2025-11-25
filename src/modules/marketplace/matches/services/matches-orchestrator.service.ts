@@ -1,12 +1,12 @@
 import { Injectable, Logger, NotFoundException, BadRequestException, ForbiddenException, forwardRef, Inject } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { ServiceRequest, ServiceRequestDocument, ServiceRequestStatus, NotificationWave } from '@transactions/service-requests/schemas/service-request.entity';
+import { ServiceRequest, ServiceRequestDocument, ServiceRequestStatus, NotificationWave } from '../../../transactions/service-requests/schemas/service-request.entity';
 import { ProviderDiscoveryService } from './provider-discovery.service';
-import { NotificationService } from '@engagement/notifications/services/notification.service';
-import { ListingsService } from '@marketplace/listings/services/listings.service';
-import { OrdersService } from '@transactions/service-requests/services/orders.service';
-import { WAVE_CONFIG } from '@common/config/waves.config';
+import { NotificationService } from '../../../engagement/notifications/services/notification.service';
+import { ListingsService } from '../../listings/services/listings.service';
+import { OrdersService } from '../../../transactions/service-requests/services/orders.service';
+import { WAVE_CONFIG } from '../../../common/config/waves.config';
 
 export interface WaveProcessingResult {
     waveNumber: number;

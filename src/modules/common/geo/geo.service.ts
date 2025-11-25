@@ -2,7 +2,7 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { User, UserDocument } from '@identity/schemas/users.schema';
+import { User, UserDocument } from '../../identity/schemas/users.schema';
 
 /**
  * GeoService handles geocoding, address resolution, and geographic utilities
