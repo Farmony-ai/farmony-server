@@ -13,10 +13,21 @@ import { AddressService } from './services/address.service';
 import { FcmTokenService } from './services/fcm-token.service';
 import { CommonModule } from '../common/common.module';
 
+const UserModelModule = MongooseModule.forFeature([{ name: User.name, schema: UserSchema }]);
+
 @Module({
-    imports: [ConfigModule, CommonModule, MongooseModule.forFeature([{ name: User.name, schema: UserSchema }])],
+    imports: [ConfigModule, CommonModule, UserModelModule],
     providers: [AuthService, UsersService, AddressService, FcmTokenService, FirebaseAuthGuard, RolesGuard, OwnershipGuard],
     controllers: [AuthController, UsersController],
-    exports: [AuthService, UsersService, AddressService, FcmTokenService, FirebaseAuthGuard, RolesGuard, OwnershipGuard],
+    exports: [
+        AuthService,
+        UsersService,
+        AddressService,
+        FcmTokenService,
+        FirebaseAuthGuard,
+        RolesGuard,
+        OwnershipGuard,
+        UserModelModule, // Export the model so other modules using FirebaseAuthGuard can access it
+    ],
 })
 export class IdentityModule {}
