@@ -2,7 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../app.module';
 import { getModelToken } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Catalogue, CatalogueDocument, ResourceCategory, TransactionType, UnitOfMeasure } from '../modules/catalogue/catalogue.schema';
+import { Catalogue, CatalogueDocument, ResourceCategory, TransactionType, UnitOfMeasure } from '../modules/marketplace/catalogue/schemas/catalogue.schema';
 
 async function seedCatalogue() {
   const app = await NestFactory.createApplicationContext(AppModule);
