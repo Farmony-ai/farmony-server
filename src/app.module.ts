@@ -17,25 +17,28 @@ import { ChatModule } from './modules/chat/chat.module';
 import { MessagesModule } from './modules/messages/messages.module';
 import { DisputesModule } from './modules/disputes/disputes.module';
 import databaseConfig from './config/database.config';
+import { AwsModule } from './modules/aws/aws.module';
+import { MatchesModule } from './modules/matches/matches.module';
+import { ServiceRequestsModule } from './modules/service-requests/service-requests.module';
+import { SeekerModule } from './modules/seeker/seeker.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ 
       isGlobal: true, 
-      envFilePath: ['.env'],
+      envFilePath: `.env.${process.env.NODE_ENV || 'dev'}`,
       load: [databaseConfig],
     }),
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (cfg: ConfigService) => ({
-        uri: 
-          (process.env.NODE_ENV === 'production')
-            ? cfg.get<string>('database.uriProd')
-            : cfg.get<string>('database.uriDev'),
+        uri: (process.env.NODE_ENV === 'prod')
+            ? cfg.get<string>('MONGO_URI_PROD')
+            : cfg.get<string>('MONGO_URI_DEV'),
       }),
     }),
-    ScheduleModule.forRoot(), // For cron jobs
+    // ScheduleModule.forRoot(), // For cron jobs
     UsersModule,
     AuthModule,
     KycModule,
@@ -50,6 +53,10 @@ import databaseConfig from './config/database.config';
     ChatModule,
     MessagesModule,
     DisputesModule,
+    AwsModule,
+    MatchesModule,
+    ServiceRequestsModule,
+    SeekerModule,
   ],
 })
 export class AppModule {}

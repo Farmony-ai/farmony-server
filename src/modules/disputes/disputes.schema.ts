@@ -71,6 +71,6 @@ export class Dispute {
 }
 
 export const DisputeSchema = SchemaFactory.createForClass(Dispute);
-DisputeSchema.index({ orderId: 1 });
+// orderId index is already created by unique: true in @Prop decorator
 DisputeSchema.index({ raisedBy: 1, status: 1 });
 DisputeSchema.index({ status: 1, createdAt: -1 });

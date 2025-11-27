@@ -5,6 +5,7 @@ import { Availability, AvailabilityDocument, DayOfWeek } from './availability.sc
 import { CreateAvailabilityDto } from './dto/create-availability.dto';
 import { UpdateAvailabilityDto } from './dto/update-availability.dto';
 
+
 @Injectable()
 export class AvailabilitiesService {
   constructor(
@@ -70,8 +71,8 @@ export class AvailabilitiesService {
     // Check each day in the requested range
     const current = new Date(startDate);
     while (current <= endDate) {
+      const dayOfWeek = this.getDayOfWeek(current) as unknown as DayOfWeek;
       const dayAvailable = availabilities.some(avail => {
-        const dayOfWeek = this.getDayOfWeek(current) as unknown as DayOfWeek;
         return avail.availableDays.includes(dayOfWeek) &&
                !avail.blockedDates.some(blocked => 
                  blocked.toDateString() === current.toDateString()

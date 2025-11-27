@@ -6,13 +6,17 @@ export type OrderDocument = Order & Document;
 export enum OrderType {
   RENTAL = 'rental',
   HIRING = 'hiring',
-  PURCHASE = 'purchase'
+  PURCHASE = 'purchase',
+  SERVICE = 'service'
 }
 
 @Schema({ timestamps: true })
 export class Order {
-  @Prop({ type: Types.ObjectId, ref: 'Listing', required: true })
-  listingId: Types.ObjectId;
+  @Prop({ type: Types.ObjectId, ref: 'Listing' })
+  listingId?: Types.ObjectId;
+
+  @Prop({ type: String, ref: 'ServiceRequest' })
+  serviceRequestId?: string;
 
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   seekerId: Types.ObjectId;
@@ -20,8 +24,20 @@ export class Order {
   @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   providerId: Types.ObjectId;
 
+  @Prop({ type: Types.ObjectId, ref: 'Category' })
+  categoryId?: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'SubCategory' })
+  subCategoryId?: Types.ObjectId;
+
   @Prop({ type: String, required: true, enum: ['pending','accepted','paid','completed','canceled'] })
   status: string;
+
+  @Prop({ type: String })
+  description?: string;
+
+  @Prop({ type: Object })
+  metadata?: Record<string, any>;
 
   @Prop({ type: String, enum: Object.values(OrderType), required: true })
   orderType: OrderType;
@@ -47,6 +63,32 @@ export class Order {
   @Prop({ type: Number, required: true })
   totalAmount: number;
 
+  // ADDRESS-FIRST APPROACH
+  @Prop({ type: Types.ObjectId, ref: 'Address' })
+  serviceAddressId?: Types.ObjectId; // Primary address reference
+
+  @Prop({
+    type: {
+      addressLine1: String,
+      village: String,
+      district: String,
+      state: String,
+      pincode: String,
+      coordinates: [Number],
+      isTemporary: { type: Boolean, default: true }
+    }
+  })
+  embeddedAddress?: { // Fallback for one-time addresses
+    addressLine1: string;
+    village: string;
+    district: string;
+    state: string;
+    pincode: string;
+    coordinates: [number, number];
+    isTemporary: boolean;
+  };
+
+  // Backward compatibility - keep for existing data
   @Prop({ type: [Number] })
   coordinates?: number[];
 
@@ -73,3 +115,5 @@ export const OrderSchema = SchemaFactory.createForClass(Order);
 OrderSchema.index({ providerId: 1, status: 1 });
 OrderSchema.index({ seekerId: 1, status: 1 });
 OrderSchema.index({ requestExpiresAt: 1, status: 1 });
+OrderSchema.index({ serviceAddressId: 1 });
+OrderSchema.index({ 'embeddedAddress.coordinates': '2dsphere' });

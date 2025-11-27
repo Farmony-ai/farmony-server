@@ -2,7 +2,8 @@ import { Controller, Post, Get, Patch, Delete, Param, Body, Query } from '@nestj
 import { CatalogueService } from './catalogue.service';
 import { CreateCatalogueDto } from './dto/create-catalogue.dto';
 import { UpdateCatalogueDto } from './dto/update-catalogue.dto';
-
+import { ApiTags } from '@nestjs/swagger';
+@ApiTags('Catalogue') 
 @Controller('catalogue')
 export class CatalogueController {
   constructor(private readonly catalogueService: CatalogueService) {}

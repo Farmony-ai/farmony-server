@@ -2,7 +2,8 @@ import { Controller, Post, Get, Patch, Param, Body, UseGuards, Request } from '@
 import { AuthGuard } from '@nestjs/passport';
 import { EscrowService } from './escrow.service';
 import { CreateEscrowDto } from './dto/create-escrow.dto';
-
+import { ApiTags } from '@nestjs/swagger';
+@ApiTags('Escrow') 
 @Controller('escrow')
 @UseGuards(AuthGuard('jwt'))
 export class EscrowController {

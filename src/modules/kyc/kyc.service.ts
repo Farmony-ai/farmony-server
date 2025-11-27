@@ -4,16 +4,22 @@ import { Model } from 'mongoose';
 import { KycDocument, KycDocumentDocument } from './kyc.schema';
 import { CreateKycDocumentDto } from './dto/create-kyc-document.dto';
 import { UpdateKycStatusDto } from './dto/update-kyc-status.dto';
+import { S3Service } from '../aws/s3.service';
 
 @Injectable()
 export class KycService {
   constructor(
-    @InjectModel(KycDocument.name)
-    private kycModel: Model<KycDocumentDocument>,
+    @InjectModel(KycDocument.name) private kycModel: Model<KycDocumentDocument>,
+    private readonly s3Service: S3Service,
   ) {}
 
-  async create(dto: CreateKycDocumentDto): Promise<KycDocument> {
-    const doc = new this.kycModel(dto);
+  async create(dto: CreateKycDocumentDto, file: Express.Multer.File): Promise<KycDocument> {
+    const docURL = await this.s3Service.uploadFile(file, 'kyc-documents');
+
+    const doc = new this.kycModel({
+      ...dto,
+      docURL,
+    });
     return doc.save();
   }
 

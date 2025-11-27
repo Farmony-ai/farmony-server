@@ -13,16 +13,59 @@ export class OrdersService {
   async create(dto: CreateOrderDto): Promise<Order> {
     const now = new Date();
     const requestExpiresAt = new Date(now.getTime() + 2 * 60 * 60 * 1000); // 2 hours from now
-    
-    const order = new this.orderModel({ 
-      ...dto, 
+
+    const order = new this.orderModel({
+      ...dto,
       createdAt: now,
       requestExpiresAt,
       status: OrderStatus.PENDING
     });
-    
+
     return order.save();
   }
+
+  async createFromServiceRequest(data: {
+    seekerId: string;
+    providerId: string;
+    listingId?: string;
+    serviceRequestId?: string;
+    categoryId: string;
+    subCategoryId?: string;
+    totalAmount: number;
+    coordinates: number[];
+    serviceStartDate: Date;
+    serviceEndDate: Date;
+    description: string;
+    quantity?: number;
+    unitOfMeasure?: string;
+    metadata?: any;
+  }): Promise<Order> {
+    const now = new Date();
+    const requestExpiresAt = new Date(now.getTime() + 2 * 60 * 60 * 1000); // 2 hours
+
+    const order = new this.orderModel({
+      seekerId: new Types.ObjectId(data.seekerId),
+      providerId: new Types.ObjectId(data.providerId),
+      listingId: data.listingId ? new Types.ObjectId(data.listingId) : undefined,
+      serviceRequestId: data.serviceRequestId,
+      categoryId: data.categoryId ? new Types.ObjectId(data.categoryId) : undefined,
+      subCategoryId: data.subCategoryId ? new Types.ObjectId(data.subCategoryId) : undefined,
+      totalAmount: data.totalAmount,
+      coordinates: data.coordinates,
+      serviceStartDate: data.serviceStartDate,
+      serviceEndDate: data.serviceEndDate,
+      description: data.description,
+      quantity: data.quantity,
+      unitOfMeasure: data.unitOfMeasure,
+      metadata: data.metadata,
+      createdAt: now,
+      requestExpiresAt,
+      status: OrderStatus.PENDING,
+      orderType: 'service',
+  });
+
+  return order.save();
+}
 
   async findAll(): Promise<Order[]> {
     return this.orderModel.find().exec();
@@ -98,29 +141,29 @@ export class OrdersService {
     return { totalOrders, fulfilledOrders, revenue };
   }
 
-  // Cron job to auto-reject expired orders - runs every 5 minutes
-  @Cron('*/5 * * * *')
-  async checkAndAutoRejectExpiredOrders() {
-    const now = new Date();
+  // // Cron job to auto-reject expired orders - runs every 5 minutes
+  // @Cron('*/5 * * * *')
+  // async checkAndAutoRejectExpiredOrders() {
+  //   const now = new Date();
     
-    const result = await this.orderModel.updateMany(
-      {
-        status: OrderStatus.PENDING,
-        requestExpiresAt: { $lt: now },
-        isAutoRejected: false
-      },
-      {
-        status: OrderStatus.CANCELED,
-        isAutoRejected: true,
-        canceledAt: now,
-        cancellationReason: 'Auto-rejected: Provider did not respond within 2 hours'
-      }
-    );
+  //   const result = await this.orderModel.updateMany(
+  //     {
+  //       status: OrderStatus.PENDING,
+  //       requestExpiresAt: { $lt: now },
+  //       isAutoRejected: false
+  //     },
+  //     {
+  //       status: OrderStatus.CANCELED,
+  //       isAutoRejected: true,
+  //       canceledAt: now,
+  //       cancellationReason: 'Auto-rejected: Provider did not respond within 2 hours'
+  //     }
+  //   );
 
-    if (result.modifiedCount > 0) {
-      console.log(`Auto-rejected ${result.modifiedCount} expired orders`);
-    }
-  }
+  //   if (result.modifiedCount > 0) {
+  //     console.log(`Auto-rejected ${result.modifiedCount} expired orders`);
+  //   }
+  // }
 
   private isValidStatusTransition(currentStatus: string, newStatus: string): boolean {
     const validTransitions: Record<string, string[]> = {
@@ -132,5 +175,38 @@ export class OrdersService {
     };
 
     return validTransitions[currentStatus]?.includes(newStatus) || false;
+  }
+
+  async findByProviderPopulated(providerId: string): Promise<any[]> {
+    return this.orderModel
+      .find({ providerId })
+      .populate('seekerId', 'name email phone address coordinates')
+      .populate('listingId', 'title description price unitOfMeasure images category')
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
+  }
+
+  async findBySeekerPopulated(seekerId: string): Promise<any[]> {
+    return this.orderModel
+      .find({ seekerId })
+      .populate('providerId', 'name email phone address coordinates')
+      .populate({
+        path: 'listingId',
+        select: 'title categoryId subCategoryId price unitOfMeasure images',
+        populate: [
+          {
+            path: 'categoryId',
+            select: 'name description'
+          },
+          {
+            path: 'subCategoryId',
+            select: 'name description'
+          }
+        ]
+      })
+      .sort({ createdAt: -1 })
+      .lean()
+      .exec();
   }
 }

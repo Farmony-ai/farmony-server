@@ -5,11 +5,13 @@ import { User, UserDocument } from './users.schema';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdatePreferencesDto } from './dto/update-preferences.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { S3Service } from '../aws/s3.service';
 
 @Injectable()
 export class UsersService {
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
+    private readonly s3Service: S3Service,
   ) {}
 
   async create(createDto: CreateUserDto): Promise<UserDocument> {
@@ -42,7 +44,7 @@ export class UsersService {
   async findByPhone(phone: string): Promise<UserDocument | null> {
     console.log(`Searching for phone: ${phone}`);
     const user = await this.userModel.findOne({ phone }).exec();
-    console.log(`Found user: ${user ? user.email : 'null'}`);
+    console.log(`Found user: ${user ? user.name : 'null'}`);
     return user;
   }
 
@@ -50,6 +52,15 @@ export class UsersService {
     const user = await this.userModel.findById(id).exec();
     if (!user) throw new NotFoundException('User not found');
     return user;
+  }
+
+  async findByIdWithProfileUrl(id: string): Promise<UserDocument & { profilePictureUrl?: string }> {
+    const user = await this.findById(id);
+    const userObj = user.toObject();
+    return {
+      ...userObj,
+      profilePictureUrl: user.profilePicture ? this.s3Service.getPublicUrl(user.profilePicture) : undefined
+    };
   }
 
   async updatePreferences(userId: string, dto: UpdatePreferencesDto): Promise<User> {
@@ -117,5 +128,38 @@ export class UsersService {
   // 🔍 Debug method to check all users with phone numbers
   async getAllUsersWithPhones(): Promise<UserDocument[]> {
     return this.userModel.find({}, 'email phone name').exec();
+  }
+
+  // 📸 Profile Picture Methods
+  async updateProfilePicture(userId: string, s3Key: string): Promise<UserDocument> {
+    const user = await this.userModel.findByIdAndUpdate(
+      userId,
+      { profilePicture: s3Key },
+      { new: true, runValidators: true }
+    ).exec();
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return user;
+  }
+
+  async deleteProfilePicture(userId: string): Promise<UserDocument> {
+    const user = await this.findById(userId);
+
+    // Delete the file from S3 if it exists
+    if (user.profilePicture) {
+      try {
+        await this.s3Service.deleteFile(user.profilePicture);
+      } catch (error) {
+        console.error('Error deleting profile picture from S3:', error);
+        // Continue with database update even if S3 deletion fails
+      }
+    }
+
+    // Update user document to remove profile picture reference
+    user.profilePicture = undefined;
+    return user.save();
   }
 }

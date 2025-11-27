@@ -5,9 +5,13 @@ import * as bcrypt from 'bcrypt';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { OtpLoginDto } from './dto/otp-login.dto';
 import { LoginDto } from './dto/login.dto';
+import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class AuthService {
+  // In-memory storage for refresh tokens (consider using Redis in production)
+  private refreshTokens = new Map<string, { userId: string; expiresAt: Date }>();
+
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
@@ -31,20 +35,50 @@ export class AuthService {
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
     const { password: userPassword, ...result } = user.toObject();
+    console.log(`User ${user.name} authenticated successfully`);
     return result;
   }
 
   async login(user: any) {
-    const payload = { email: user.email, sub: user._id };
+    const payload = {
+      sub: user._id,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+    };
+    const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
+    const refreshToken = this.generateRefreshToken(user._id);
+
     return {
-      access_token: this.jwtService.sign(payload),
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      expires_in: 900, // 15 minutes in seconds
+      token_type: 'Bearer',
+      user: {
+        id: user._id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      },
     };
   }
 
   async register(createDto: CreateUserDto) {
     const user = await this.usersService.create(createDto);
     const { password, ...result } = user.toObject();
-    return result;
+    
+    // Auto-login after registration
+    const payload = { email: user.email, sub: user._id };
+    const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
+    const refreshToken = this.generateRefreshToken(user._id.toString());
+    
+    return {
+      user: result,
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      expires_in: 900,
+      token_type: 'Bearer',
+    };
   }
 
   async otpLogin(otpLoginDto: OtpLoginDto) {
@@ -71,27 +105,33 @@ export class AuthService {
       console.log(`Phone number ${phone} found for user: ${user.email}`);
     }
 
-    // 3. Mark user as verified (if not already)
+    // Mark user as verified (if not already)
     if (!user.isVerified) {
       user.isVerified = true;
       await user.save();
       console.log(`User ${user.email} marked as verified`);
     }
 
-    // 4. Generate JWT token (matching the specification exactly)
+    // Generate tokens
     const payload = {
       id: user._id,
       email: user.email,
       phone: user.phone,
       role: user.role,
+      sub: user._id,
     };
 
-    const token = this.jwtService.sign(payload, { expiresIn: '7d' });
+    const accessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
+    const refreshToken = this.generateRefreshToken(user._id.toString());
 
-    // 5. Return success response (matching the specification exactly)
+    // Return success response (maintaining backward compatibility)
     return {
       message: 'OTP login successful',
-      token,
+      token: accessToken, // For backward compatibility
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      expires_in: 900,
+      token_type: 'Bearer',
       user: {
         id: user._id,
         name: user.name,
@@ -104,5 +144,88 @@ export class AuthService {
         updatedAt: (user as any).updatedAt,
       },
     };
+  }
+
+  private generateRefreshToken(userId: string): string {
+    const refreshToken = uuidv4();
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30); // Refresh token valid for 30 days
+
+    this.refreshTokens.set(refreshToken, {
+      userId,
+      expiresAt
+    });
+
+    // Clean up expired tokens periodically
+    this.cleanupExpiredTokens();
+
+    return refreshToken;
+  }
+
+  async refreshToken(refreshToken: string) {
+    const tokenData = this.refreshTokens.get(refreshToken);
+
+    if (!tokenData) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    if (new Date() > tokenData.expiresAt) {
+      this.refreshTokens.delete(refreshToken);
+      throw new UnauthorizedException('Refresh token expired');
+    }
+
+    const user = await this.usersService.findById(tokenData.userId);
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    // Delete old refresh token
+    this.refreshTokens.delete(refreshToken);
+
+    // Generate new tokens with the same payload structure as login
+    const payload = {
+      sub: user._id,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+    };
+
+    const newAccessToken = this.jwtService.sign(payload, { expiresIn: '15m' });
+    const newRefreshToken = this.generateRefreshToken(user._id.toString());
+
+    return {
+      access_token: newAccessToken,
+      refresh_token: newRefreshToken,
+      expires_in: 900,
+      token_type: 'Bearer',
+    };
+  }
+
+  private cleanupExpiredTokens() {
+    const now = new Date();
+    for (const [token, data] of this.refreshTokens.entries()) {
+      if (now > data.expiresAt) {
+        this.refreshTokens.delete(token);
+      }
+    }
+  }
+
+  // Optional: Add method to revoke all refresh tokens for a user
+  async revokeUserTokens(userId: string) {
+    for (const [token, data] of this.refreshTokens.entries()) {
+      if (data.userId === userId) {
+        this.refreshTokens.delete(token);
+      }
+    }
+  }
+
+  // Optional: Add method to validate current access token
+  async validateToken(token: string): Promise<any> {
+    try {
+      const decoded = this.jwtService.verify(token);
+      return { valid: true, user: decoded };
+    } catch (error) {
+      return { valid: false, error: error.message };
+    }
   }
 }
