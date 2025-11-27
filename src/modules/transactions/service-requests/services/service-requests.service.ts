@@ -312,6 +312,143 @@ export class ServiceRequestsService {
     }
 
     /**
+     * Find nearby service requests for a provider based on their location and categories
+     * Pull-based approach - queries in real-time based on provider's profile
+     * Used for "Open Opportunities" feature in provider dashboard
+     */
+    async findNearbyForProvider(
+        providerId: string,
+        coordinates: [number, number], // [lon, lat]
+        categoryIds: string[],
+        subCategoryIds: string[],
+        radiusMeters: number = 40000 // Default 40km (max wave radius)
+    ): Promise<{ requests: ServiceRequest[]; total: number }> {
+        this.logger.debug(`Finding nearby requests for provider ${providerId} within ${radiusMeters}m`);
+
+        // Build the base query for $geoNear
+        const baseQuery: any = {
+            status: { $in: [ServiceRequestStatus.OPEN, ServiceRequestStatus.MATCHED] },
+            expiresAt: { $gt: new Date() },
+            categoryId: { $in: categoryIds.map(id => new Types.ObjectId(id)) },
+        };
+
+        // Exclude requests the provider has declined
+        baseQuery['lifecycle.matching.declinedProviders'] = { $nin: [new Types.ObjectId(providerId)] };
+
+        // If subCategoryIds provided, filter by them (or allow requests without subcategory)
+        if (subCategoryIds.length > 0) {
+            baseQuery.$or = [
+                { subCategoryId: { $in: subCategoryIds.map(id => new Types.ObjectId(id)) } },
+                { subCategoryId: { $exists: false } },
+                { subCategoryId: null },
+            ];
+        }
+
+        const pipeline: any[] = [
+            {
+                $geoNear: {
+                    near: {
+                        type: 'Point',
+                        coordinates: coordinates,
+                    },
+                    distanceField: 'distanceMeters',
+                    maxDistance: radiusMeters,
+                    spherical: true,
+                    query: baseQuery,
+                },
+            },
+            // Lookup seeker info
+            {
+                $lookup: {
+                    from: 'users',
+                    localField: 'seekerId',
+                    foreignField: '_id',
+                    as: 'seekerData',
+                },
+            },
+            {
+                $addFields: {
+                    seekerId: {
+                        $cond: {
+                            if: { $gt: [{ $size: '$seekerData' }, 0] },
+                            then: {
+                                _id: { $arrayElemAt: ['$seekerData._id', 0] },
+                                name: { $arrayElemAt: ['$seekerData.name', 0] },
+                                phone: { $arrayElemAt: ['$seekerData.phone', 0] },
+                                email: { $arrayElemAt: ['$seekerData.email', 0] },
+                            },
+                            else: '$seekerId',
+                        },
+                    },
+                },
+            },
+            { $unset: 'seekerData' },
+            // Lookup category info
+            {
+                $lookup: {
+                    from: 'catalogues',
+                    localField: 'categoryId',
+                    foreignField: '_id',
+                    as: 'categoryData',
+                },
+            },
+            {
+                $addFields: {
+                    categoryId: {
+                        $cond: {
+                            if: { $gt: [{ $size: '$categoryData' }, 0] },
+                            then: {
+                                _id: { $arrayElemAt: ['$categoryData._id', 0] },
+                                name: { $arrayElemAt: ['$categoryData.name', 0] },
+                                icon: { $arrayElemAt: ['$categoryData.icon', 0] },
+                            },
+                            else: '$categoryId',
+                        },
+                    },
+                },
+            },
+            { $unset: 'categoryData' },
+            // Lookup subcategory info
+            {
+                $lookup: {
+                    from: 'catalogues',
+                    localField: 'subCategoryId',
+                    foreignField: '_id',
+                    as: 'subCategoryData',
+                },
+            },
+            {
+                $addFields: {
+                    subCategoryId: {
+                        $cond: {
+                            if: { $gt: [{ $size: '$subCategoryData' }, 0] },
+                            then: {
+                                _id: { $arrayElemAt: ['$subCategoryData._id', 0] },
+                                name: { $arrayElemAt: ['$subCategoryData.name', 0] },
+                            },
+                            else: '$subCategoryId',
+                        },
+                    },
+                },
+            },
+            { $unset: 'subCategoryData' },
+            // Sort by distance (nearest first)
+            { $sort: { distanceMeters: 1 } },
+            // Limit results
+            { $limit: 50 },
+        ];
+
+        const results = await this.serviceRequestModel.aggregate(pipeline).exec();
+
+        this.logger.debug(`Found ${results.length} nearby requests for provider ${providerId}`);
+
+        return {
+            requests: results,
+            total: results.length,
+        };
+    }
+
+    /**
      * Process scheduled waves for all open service requests
      * This is typically called by a cron job or manually by admin
      * Delegates to MatchesOrchestratorService for wave processing

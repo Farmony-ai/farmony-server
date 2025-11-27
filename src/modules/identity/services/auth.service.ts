@@ -3,12 +3,13 @@ import { UsersService } from './users.service';
 import { FirebaseAdminService } from '../../common/firebase/firebase-admin.service';
 import { RegisterDto } from '../dto/register.dto';
 import { LoginDto } from '../dto/login.dto';
+import { FirebaseLoginDto } from '../dto/firebase-login.dto';
 
 @Injectable()
 export class AuthService {
     private readonly logger = new Logger(AuthService.name);
 
-    constructor(private readonly usersService: UsersService, private readonly firebaseAdmin: FirebaseAdminService) {}
+    constructor(private readonly usersService: UsersService, private readonly firebaseAdmin: FirebaseAdminService) { }
 
     /**
      * Register a new user:
@@ -43,16 +44,12 @@ export class AuthService {
 
             this.logger.log(`New user created: ${user._id}`);
 
-            // Generate custom token with RBAC claims
+            // Set custom claims on the existing Firebase user
             const rbacClaims = this.buildRbacClaims(user);
-            const customToken = await this.firebaseAdmin.createCustomToken(
-                user._id.toString(),
-                rbacClaims
-            );
+            await this.firebaseAdmin.setCustomClaims(firebaseUserId, rbacClaims);
 
             return {
                 success: true,
-                customToken,
                 user: {
                     id: user._id,
                     name: user.name,
@@ -101,18 +98,14 @@ export class AuthService {
                 this.logger.log(`User ${user._id} marked as verified`);
             }
 
-            // Generate custom token with RBAC claims
+            // Set custom claims on the existing Firebase user
             const rbacClaims = this.buildRbacClaims(user);
-            const customToken = await this.firebaseAdmin.createCustomToken(
-                user._id.toString(),
-                rbacClaims
-            );
+            await this.firebaseAdmin.setCustomClaims(firebaseUserId, rbacClaims);
 
             this.logger.log(`Login successful for user ${user._id}`);
 
             return {
                 success: true,
-                customToken,
                 user: {
                     id: user._id,
                     name: user.name,
@@ -131,6 +124,96 @@ export class AuthService {
                 throw error;
             }
             throw new UnauthorizedException('Login failed: Invalid token');
+        }
+    }
+
+    /**
+     * Firebase OTP Login (unified register/login):
+     * 1. Verify Firebase ID token
+     * 2. Check if user exists by firebaseUserId OR phone
+     * 3. If exists → login (and update firebaseUserId if changed)
+     * 4. If not exists → register (requires name)
+     */
+    async firebaseLogin(dto: FirebaseLoginDto) {
+        try {
+            const decodedToken = await this.firebaseAdmin.verifyIdToken(dto.idToken);
+
+            const firebaseUserId = decodedToken.uid;
+            const phone = dto.phoneNumber || decodedToken.phone_number;
+            const email = dto.email || decodedToken.email;
+
+            this.logger.log(`Firebase login attempt for Firebase UID: ${firebaseUserId}, phone: ${phone}`);
+
+            // Check if user exists by firebaseUserId first
+            let user = await this.usersService.findByFirebaseUserId(firebaseUserId);
+
+            // If not found by firebaseUserId, check by phone (handles Firebase account recreation)
+            if (!user && phone) {
+                user = await this.usersService.findByPhone(phone);
+
+                if (user) {
+                    // User exists with same phone but different firebaseUserId
+                    // This happens when user deletes Firebase account and creates new one
+                    this.logger.log(`Found user by phone, updating firebaseUserId from ${user.firebaseUserId} to ${firebaseUserId}`);
+                    user.firebaseUserId = firebaseUserId;
+                    await user.save();
+                }
+            }
+
+            if (user) {
+                // Existing user - login
+                this.logger.log(`Existing user found, logging in: ${user._id}`);
+
+                // Mark as verified if not already
+                if (!user.isVerified) {
+                    user.isVerified = true;
+                    await user.save();
+                    this.logger.log(`User ${user._id} marked as verified`);
+                }
+            } else {
+                // New user - register
+                this.logger.log(`New user, registering...`);
+
+                if (!dto.name) {
+                    throw new BadRequestException('Name is required for first-time registration');
+                }
+
+                user = await this.usersService.create({
+                    firebaseUserId,
+                    phone,
+                    name: dto.name,
+                    email,
+                });
+
+                this.logger.log(`New user created: ${user._id}`);
+            }
+
+            // Set custom claims on the existing Firebase user
+            const rbacClaims = this.buildRbacClaims(user);
+            await this.firebaseAdmin.setCustomClaims(firebaseUserId, rbacClaims);
+
+            this.logger.log(`Firebase login successful for user ${user._id}`);
+
+            return {
+                success: true,
+                user: {
+                    id: user._id,
+                    name: user.name,
+                    email: user.email,
+                    phone: user.phone,
+                    role: user.role,
+                    isVerified: user.isVerified,
+                    kycStatus: user.kycStatus,
+                    ...rbacClaims,
+                },
+                message: 'Login successful',
+            };
+        } catch (error) {
+            this.logger.error('Firebase login failed:', error);
+            if (error instanceof BadRequestException) {
+                throw error;
+            }
+            throw new UnauthorizedException('Firebase login failed: Invalid token');
         }
     }
 
@@ -163,17 +246,14 @@ export class AuthService {
         user.role = newRole;
         await user.save();
 
-        // Build new RBAC claims
+        // Set custom claims
         const rbacClaims = this.buildRbacClaims(user);
-
-        // Generate new custom token
-        const customToken = await this.firebaseAdmin.createCustomToken(userId, rbacClaims);
+        await this.firebaseAdmin.setCustomClaims(user.firebaseUserId, rbacClaims);
 
         this.logger.log(`Role updated for user ${userId}: ${newRole}`);
 
         return {
             success: true,
-            customToken,
             user: {
                 id: user._id,
                 role: user.role,

@@ -1,9 +1,11 @@
-import { Controller, Get, Post, Body, Param, Patch, UseGuards, Request, Query, HttpStatus, HttpCode, UseInterceptors, UploadedFiles } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Patch, UseGuards, Request, Query, HttpStatus, HttpCode, UseInterceptors, UploadedFiles, Logger } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ServiceRequestsService } from '../services/service-requests.service';
 import { CreateServiceRequestDto, UpdateServiceRequestDto, AcceptServiceRequestDto, DeclineServiceRequestDto, ServiceRequestFiltersDto } from '../dto';
 import { FirebaseAuthGuard } from '../../../identity/guards/firebase-auth.guard';
 import { FirebaseStorageService } from '../../../common/firebase/firebase-storage.service';
+import { GeoService } from '../../../common/geo/geo.service';
+import { ListingsService } from '../../../marketplace/listings/services/listings.service';
 import { ApiTags, ApiOperation, ApiConsumes, ApiBody, ApiOkResponse, ApiCreatedResponse } from '@nestjs/swagger';
 import { ServiceRequestStatusDto } from '../dto/service-request-status.dto';
 import { AcceptServiceRequestResponseDto, PaginatedServiceRequestsDto, ServiceRequestResponseDto } from '../dto/service-request-response.dto';
@@ -12,7 +14,14 @@ import { AcceptServiceRequestResponseDto, PaginatedServiceRequestsDto, ServiceRe
 @Controller('service-requests')
 @UseGuards(FirebaseAuthGuard)
 export class ServiceRequestsController {
-    constructor(private readonly serviceRequestsService: ServiceRequestsService, private readonly storageService: FirebaseStorageService) {}
+    private readonly logger = new Logger(ServiceRequestsController.name);
+
+    constructor(
+        private readonly serviceRequestsService: ServiceRequestsService,
+        private readonly storageService: FirebaseStorageService,
+        private readonly geoService: GeoService,
+        private readonly listingsService: ListingsService,
+    ) {}
 
     @Post()
     @UseInterceptors(FilesInterceptor('attachments', 5))
@@ -52,27 +61,113 @@ export class ServiceRequestsController {
     }
 
     @Get('available')
-    @ApiOperation({ summary: 'Get available service requests for a provider' })
+    @ApiOperation({ summary: 'Get available service requests for a provider based on location and categories' })
     @ApiOkResponse({ type: PaginatedServiceRequestsDto })
     async findAvailableForProvider(@Request() req, @Query() filters: ServiceRequestFiltersDto) {
         const providerId = req.user.uid || req.user.sub || req.user.userId;
+        this.logger.debug(`Finding available requests for provider ${providerId}`);
 
-        // This will return only requests where the provider was notified
-        // The service will handle the filtering based on notification waves
-        const availableRequests = await this.serviceRequestsService.findAll({
+        // 1. Get provider's default address for location-based search
+        let defaultAddress: any = null;
+        try {
+            defaultAddress = await this.geoService.getDefaultAddress(providerId);
+        } catch (error) {
+            this.logger.warn(`Could not get default address for provider ${providerId}: ${error.message}`);
+        }
+
+        if (!defaultAddress?.location?.coordinates) {
+            // Fallback: return only already-notified requests (push-based)
+            this.logger.debug(`No default address for provider ${providerId}, using fallback`);
+            return this.getFallbackNotifiedRequests(providerId, filters);
+        }
+
+        const coordinates: [number, number] = defaultAddress.location.coordinates;
+
+        // 2. Get provider's listings to find their categories
+        let providerListings: any[] = [];
+        try {
+            providerListings = await this.listingsService.findByProvider(providerId);
+        } catch (error) {
+            this.logger.warn(`Could not get listings for provider ${providerId}: ${error.message}`);
+        }
+
+        if (!providerListings || providerListings.length === 0) {
+            this.logger.debug(`No listings for provider ${providerId}`);
+            return { requests: [], total: 0 };
+        }
+
+        // Extract unique category IDs and subcategory IDs from active listings
+        const categoryIds = [...new Set(
+            providerListings
+                .filter(l => l.isActive && l.categoryId)
+                .map(l => l.categoryId._id?.toString() || l.categoryId.toString())
+        )];
+
+        const subCategoryIds = [...new Set(
+            providerListings
+                .filter(l => l.isActive && l.subCategoryId)
+                .map(l => l.subCategoryId._id?.toString() || l.subCategoryId.toString())
+        )];
+
+        if (categoryIds.length === 0) {
+            this.logger.debug(`No active categories for provider ${providerId}`);
+            return { requests: [], total: 0 };
+        }
+
+        this.logger.debug(`Provider ${providerId} has categories: ${categoryIds.join(', ')}, subcategories: ${subCategoryIds.join(', ')}`);
+
+        // 3. Find nearby requests matching provider's categories (pull-based)
+        const radiusMeters = 40000; // 40km - matches max wave radius from config
+        const nearbyResult = await this.serviceRequestsService.findNearbyForProvider(
+            providerId,
+            coordinates,
+            categoryIds,
+            subCategoryIds,
+            radiusMeters,
+        );
+
+        // 4. Also include requests where provider was already notified (push-based)
+        // This ensures backward compatibility with the wave notification system
+        const notifiedRequests = await this.getNotifiedRequests(providerId, filters);
+
+        // 5. Merge and deduplicate (nearby takes precedence for distance info)
+        const nearbyIds = new Set(nearbyResult.requests.map((r: any) => r._id.toString()));
+        const additionalNotified = notifiedRequests.filter((r: any) => !nearbyIds.has(r._id.toString()));
+
+        const allRequests = [...nearbyResult.requests, ...additionalNotified];
+
+        this.logger.debug(`Found ${nearbyResult.requests.length} nearby + ${additionalNotified.length} notified = ${allRequests.length} total for provider ${providerId}`);
+
+        return {
+            requests: allRequests,
+            total: allRequests.length,
+        };
+    }
+
+    /**
+     * Helper method to get requests where provider was notified via wave system
+     */
+    private async getNotifiedRequests(providerId: string, filters: ServiceRequestFiltersDto) {
+        const allMatched = await this.serviceRequestsService.findAll({
             status: 'MATCHED' as any,
             page: filters.page,
             limit: filters.limit,
         });
 
-        // Filter to only show requests where this provider was notified
-        const providerRequests = availableRequests.requests.filter((request: any) => (request.lifecycle?.matching?.allNotifiedProviders || [])
-            .some((pid: any) => pid.toString() === providerId));
+        return allMatched.requests.filter((request: any) =>
+            (request.lifecycle?.matching?.allNotifiedProviders || [])
+                .some((pid: any) => pid.toString() === providerId) &&
+            !(request.lifecycle?.matching?.declinedProviders || [])
+                .some((pid: any) => pid.toString() === providerId)
+        );
+    }
 
-        return {
-            requests: providerRequests,
-            total: providerRequests.length,
-        };
+    /**
+     * Fallback when provider has no default address - return only wave-notified requests
+     */
+    private async getFallbackNotifiedRequests(providerId: string, filters: ServiceRequestFiltersDto) {
+        const requests = await this.getNotifiedRequests(providerId, filters);
+        return { requests, total: requests.length };
     }
 
     @Get(':id')

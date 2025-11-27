@@ -2,6 +2,7 @@ import { Controller, Post, Body, Get, Request, UseGuards, Patch, Param } from '@
 import { AuthService } from '../services/auth.service';
 import { RegisterDto } from '../dto/register.dto';
 import { LoginDto } from '../dto/login.dto';
+import { FirebaseLoginDto } from '../dto/firebase-login.dto';
 import { FirebaseAuthGuard } from '../guards/firebase-auth.guard';
 import { RolesGuard } from '../guards/roles.guard';
 import { Roles } from '../decorators/roles.decorator';
@@ -35,6 +36,18 @@ export class AuthController {
     @ApiResponse({ status: 401, description: 'Invalid token' })
     async login(@Body() dto: LoginDto) {
         return this.authService.login(dto);
+    }
+
+    @Post('firebase-login')
+    @ApiOperation({
+        summary: 'Firebase OTP login (unified register/login)',
+        description: 'Authenticate with Firebase ID token. Automatically registers new users or logs in existing users.',
+    })
+    @ApiResponse({ status: 200, description: 'Login/Registration successful' })
+    @ApiResponse({ status: 400, description: 'Name required for first-time registration' })
+    @ApiResponse({ status: 401, description: 'Invalid token' })
+    async firebaseLogin(@Body() dto: FirebaseLoginDto) {
+        return this.authService.firebaseLogin(dto);
     }
 
     @Post('verify-token')
