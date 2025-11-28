@@ -27,7 +27,7 @@ export class ServiceRequestsService {
         private readonly notificationService: NotificationService,
         @Inject(forwardRef(() => MatchesOrchestratorService))
         private readonly matchesOrchestratorService: MatchesOrchestratorService
-    ) {}
+    ) { }
 
     async create(createDto: CreateServiceRequestDto, seekerId: string): Promise<ServiceRequest> {
         const expiresAt = new Date();
@@ -479,5 +479,38 @@ export class ServiceRequestsService {
             this.logger.error('Error in processScheduledWaves:', error);
             throw error;
         }
+    }
+    /**
+     * Find service requests within a bounding box
+     * Optimized for map view - returns lightweight data
+     */
+    async findInBoundingBox(bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number }): Promise<any[]> {
+        const { minLat, maxLat, minLng, maxLng } = bounds;
+
+        // Construct polygon for box
+        // MongoDB expects: [[minLng, minLat], [maxLng, minLat], [maxLng, maxLat], [minLng, maxLat], [minLng, minLat]]
+        // But for $geoWithin $box it's simpler: [[minLng, minLat], [maxLng, maxLat]]
+
+        const query = {
+            status: { $in: [ServiceRequestStatus.OPEN, ServiceRequestStatus.MATCHED, 'no_providers_available'] },
+            expiresAt: { $gt: new Date() },
+            location: {
+                $geoWithin: {
+                    $box: [
+                        [minLng, minLat], // Bottom Left
+                        [maxLng, maxLat]  // Top Right
+                    ]
+                }
+            }
+        };
+
+        const requests = await this.serviceRequestModel
+            .find(query)
+            .select('_id title location status categoryId subCategoryId') // Select only needed fields
+            .populate('categoryId', 'name icon')
+            .lean()
+            .limit(500); // Safety limit
+
+        return requests;
     }
 }

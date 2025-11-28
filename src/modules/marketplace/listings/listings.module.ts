@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Listing, ListingSchema } from './schemas/listings.schema';
 import { Availability, AvailabilitySchema } from './schemas/availability.schema';
@@ -13,7 +13,7 @@ import { AvailabilitiesController } from './controllers/availabilities.controlle
 @Module({
     imports: [
         CommonModule,
-        IdentityModule,
+        forwardRef(() => IdentityModule),
         MongooseModule.forFeature([
             { name: Listing.name, schema: ListingSchema },
             { name: Availability.name, schema: AvailabilitySchema },
@@ -24,4 +24,4 @@ import { AvailabilitiesController } from './controllers/availabilities.controlle
     controllers: [ListingsController, AvailabilitiesController],
     exports: [ListingsService, AvailabilitiesService],
 })
-export class ListingsModule {}
+export class ListingsModule { }

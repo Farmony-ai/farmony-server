@@ -9,10 +9,10 @@ import { ListingsService } from '../../../marketplace/listings/services/listings
 import { ApiTags, ApiOperation, ApiConsumes, ApiBody, ApiOkResponse, ApiCreatedResponse } from '@nestjs/swagger';
 import { ServiceRequestStatusDto } from '../dto/service-request-status.dto';
 import { AcceptServiceRequestResponseDto, PaginatedServiceRequestsDto, ServiceRequestResponseDto } from '../dto/service-request-response.dto';
+import { Public } from '../../../common/decorators/public.decorator';
 
 @ApiTags('Service Requests')
 @Controller('service-requests')
-@UseGuards(FirebaseAuthGuard)
 export class ServiceRequestsController {
     private readonly logger = new Logger(ServiceRequestsController.name);
 
@@ -21,16 +21,17 @@ export class ServiceRequestsController {
         private readonly storageService: FirebaseStorageService,
         private readonly geoService: GeoService,
         private readonly listingsService: ListingsService,
-    ) {}
+    ) { }
 
     @Post()
+    @UseGuards(FirebaseAuthGuard)
     @UseInterceptors(FilesInterceptor('attachments', 5))
     @HttpCode(HttpStatus.CREATED)
     @ApiOperation({ summary: 'Create a new service request' })
     @ApiConsumes('multipart/form-data')
     @ApiCreatedResponse({ type: ServiceRequestResponseDto })
     async create(@UploadedFiles() files: Express.Multer.File[], @Body() createDto: CreateServiceRequestDto, @Request() req) {
-        const seekerId = req.user.uid || req.user.sub || req.user.userId;
+        const seekerId = req.user.userId;
 
         // Handle file uploads if any
         let attachmentKeys = [];
@@ -43,6 +44,7 @@ export class ServiceRequestsController {
     }
 
     @Get()
+    @UseGuards(FirebaseAuthGuard)
     @ApiOperation({ summary: 'Get all service requests with filters' })
     @ApiOkResponse({ type: PaginatedServiceRequestsDto })
     async findAll(@Query() filters: ServiceRequestFiltersDto) {
@@ -50,10 +52,11 @@ export class ServiceRequestsController {
     }
 
     @Get('my-requests')
+    @UseGuards(FirebaseAuthGuard)
     @ApiOperation({ summary: "Get seeker's own service requests" })
     @ApiOkResponse({ type: PaginatedServiceRequestsDto })
     async findMyRequests(@Request() req, @Query() filters: ServiceRequestFiltersDto) {
-        const seekerId = req.user.uid || req.user.sub || req.user.userId;
+        const seekerId = req.user.userId;
         return this.serviceRequestsService.findAll({
             ...filters,
             seekerId,
@@ -61,10 +64,11 @@ export class ServiceRequestsController {
     }
 
     @Get('available')
+    @UseGuards(FirebaseAuthGuard)
     @ApiOperation({ summary: 'Get available service requests for a provider based on location and categories' })
     @ApiOkResponse({ type: PaginatedServiceRequestsDto })
     async findAvailableForProvider(@Request() req, @Query() filters: ServiceRequestFiltersDto) {
-        const providerId = req.user.uid || req.user.sub || req.user.userId;
+        const providerId = req.user.userId;
         this.logger.debug(`Finding available requests for provider ${providerId}`);
 
         // 1. Get provider's default address for location-based search
@@ -171,10 +175,11 @@ export class ServiceRequestsController {
     }
 
     @Get(':id')
+    @UseGuards(FirebaseAuthGuard)
     @ApiOperation({ summary: 'Get a specific service request by ID' })
     @ApiOkResponse({ type: ServiceRequestResponseDto })
     async findOne(@Param('id') id: string, @Request() req) {
-        const userId = req.user.uid || req.user.sub || req.user.userId;
+        const userId = req.user.userId;
         const request = await this.serviceRequestsService.findById(id);
 
         // Check if user has access to view this request
@@ -194,27 +199,30 @@ export class ServiceRequestsController {
     }
 
     @Patch(':id')
+    @UseGuards(FirebaseAuthGuard)
     @ApiOperation({ summary: 'Update a service request (seeker only)' })
     @ApiOkResponse({ type: ServiceRequestResponseDto })
     async update(@Param('id') id: string, @Body() updateDto: UpdateServiceRequestDto, @Request() req) {
-        const userId = req.user.uid || req.user.sub || req.user.userId;
+        const userId = req.user.userId;
         return this.serviceRequestsService.update(id, updateDto, userId);
     }
 
     @Post(':id/accept')
+    @UseGuards(FirebaseAuthGuard)
     @HttpCode(HttpStatus.OK)
     @ApiOperation({ summary: 'Accept a service request (provider only)' })
     @ApiOkResponse({ type: AcceptServiceRequestResponseDto })
     async accept(@Param('id') id: string, @Body() acceptDto: AcceptServiceRequestDto, @Request() req) {
-        const providerId = req.user.uid || req.user.sub || req.user.userId;
+        const providerId = req.user.userId;
         return this.serviceRequestsService.accept(id, providerId, acceptDto);
     }
 
     @Post(':id/decline')
+    @UseGuards(FirebaseAuthGuard)
     @HttpCode(HttpStatus.OK)
     @ApiOperation({ summary: 'Decline a service request (provider only)' })
     async decline(@Param('id') id: string, @Body() declineDto: DeclineServiceRequestDto, @Request() req) {
-        const providerId = req.user.uid || req.user.sub || req.user.userId;
+        const providerId = req.user.userId;
         await this.serviceRequestsService.decline(id, providerId, declineDto.reason);
         return {
             message: 'Service request declined successfully',
@@ -222,15 +230,17 @@ export class ServiceRequestsController {
     }
 
     @Post(':id/cancel')
+    @UseGuards(FirebaseAuthGuard)
     @HttpCode(HttpStatus.OK)
     @ApiOperation({ summary: 'Cancel a service request (seeker only)' })
     @ApiOkResponse({ type: ServiceRequestResponseDto })
     async cancel(@Param('id') id: string, @Body('reason') reason: string, @Request() req) {
-        const userId = req.user.uid || req.user.sub || req.user.userId;
+        const userId = req.user.userId;
         return this.serviceRequestsService.cancel(id, userId, reason);
     }
 
     @Get(':id/status')
+    @UseGuards(FirebaseAuthGuard)
     @ApiOperation({ summary: 'Get service request status and wave information' })
     @ApiOkResponse({ type: ServiceRequestStatusDto })
     async getStatus(@Param('id') id: string, @Request() req) {
@@ -253,6 +263,7 @@ export class ServiceRequestsController {
     }
 
     @Get('stats/provider/:providerId')
+    @UseGuards(FirebaseAuthGuard)
     @ApiOperation({ summary: "Get provider's service request statistics" })
     async getProviderStats(@Param('providerId') providerId: string) {
         // Get all requests where provider was notified
@@ -277,6 +288,7 @@ export class ServiceRequestsController {
 
     // Admin endpoint to manually trigger wave processing
     @Post('admin/process-waves')
+    @UseGuards(FirebaseAuthGuard)
     @HttpCode(HttpStatus.NO_CONTENT)
     @ApiOperation({ summary: 'Manually trigger wave processing (admin only)' })
     async processWaves() {
@@ -286,10 +298,159 @@ export class ServiceRequestsController {
 
     // Admin endpoint to expire old requests
     @Post('admin/expire-old')
+    @UseGuards(FirebaseAuthGuard)
     @HttpCode(HttpStatus.NO_CONTENT)
     @ApiOperation({ summary: 'Manually expire old requests (admin only)' })
     async expireOldRequests() {
         // This would typically be protected with an admin guard
         await this.serviceRequestsService.expireOldRequests();
     }
+
+    @Get('debug/match-check')
+    @UseGuards(FirebaseAuthGuard)
+    @ApiOperation({ summary: 'Debug why a request is not matching for a provider' })
+    async debugMatchCheck(
+        @Query('providerId') providerId: string,
+        @Query('requestId') requestId: string,
+    ) {
+        const report: any = {
+            providerId,
+            requestId,
+            checks: {},
+            conclusion: [],
+        };
+
+        // 1. Check Provider Address
+        let providerCoords: [number, number] | null = null;
+        try {
+            const defaultAddress = await this.geoService.getDefaultAddress(providerId);
+            if (defaultAddress?.location?.coordinates) {
+                providerCoords = defaultAddress.location.coordinates;
+                report.checks.providerLocation = {
+                    status: 'OK',
+                    coordinates: providerCoords,
+                    addressId: defaultAddress._id,
+                };
+            } else {
+                report.checks.providerLocation = {
+                    status: 'FAIL',
+                    reason: 'No default address or coordinates found',
+                };
+                report.conclusion.push('Provider has no location set');
+            }
+        } catch (e) {
+            report.checks.providerLocation = { status: 'ERROR', error: e.message };
+        }
+
+        // 2. Check Service Request
+        let request: any = null;
+        try {
+            request = await this.serviceRequestsService.findById(requestId);
+            report.checks.request = {
+                status: 'OK',
+                requestStatus: request.status,
+                expiresAt: request.expiresAt,
+                categoryId: request.categoryId?._id || request.categoryId,
+                subCategoryId: request.subCategoryId?._id || request.subCategoryId,
+            };
+
+            if (request.status !== 'OPEN' && request.status !== 'MATCHED') {
+                report.conclusion.push(`Request status is ${request.status} (must be OPEN or MATCHED)`);
+            }
+            if (new Date(request.expiresAt) <= new Date()) {
+                report.conclusion.push('Request has expired');
+            }
+        } catch (e) {
+            report.checks.request = { status: 'ERROR', error: e.message };
+            report.conclusion.push('Request not found or error fetching it');
+            return report;
+        }
+
+        // 3. Check Distance
+        if (providerCoords && request?.location?.coordinates) {
+            const reqCoords = request.location.coordinates;
+            // Simple Haversine or just use a library if available, but manual calc is fine for debug
+            const R = 6371e3; // metres
+            const φ1 = (providerCoords[1] * Math.PI) / 180;
+            const φ2 = (reqCoords[1] * Math.PI) / 180;
+            const Δφ = ((reqCoords[1] - providerCoords[1]) * Math.PI) / 180;
+            const Δλ = ((reqCoords[0] - providerCoords[0]) * Math.PI) / 180;
+
+            const a =
+                Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            const distance = R * c;
+
+            report.checks.distance = {
+                status: 'OK',
+                meters: distance,
+                km: distance / 1000,
+                withinRange: distance <= 40000,
+            };
+
+            if (distance > 40000) {
+                report.conclusion.push(`Distance ${Math.round(distance / 1000)}km is > 40km limit`);
+            }
+        } else {
+            report.checks.distance = { status: 'FAIL', reason: 'Missing coordinates' };
+        }
+
+        // 4. Check Categories
+        try {
+            const listings = await this.listingsService.findByProvider(providerId);
+            const activeListings = listings.filter((l: any) => l.isActive);
+
+            const providerCategories = new Set(
+                activeListings.map((l: any) => l.categoryId?._id?.toString() || l.categoryId?.toString())
+            );
+            const providerSubCategories = new Set(
+                activeListings.map((l: any) => l.subCategoryId?._id?.toString() || l.subCategoryId?.toString())
+            );
+
+            const reqCatId = request.categoryId?._id?.toString() || request.categoryId?.toString();
+            const reqSubCatId = request.subCategoryId?._id?.toString() || request.subCategoryId?.toString();
+
+            const catMatch = providerCategories.has(reqCatId);
+            // Subcategory match: either provider has the subcat, or request has no subcat
+            const subCatMatch = !reqSubCatId || providerSubCategories.has(reqSubCatId);
+
+            report.checks.categories = {
+                status: 'OK',
+                providerCategories: Array.from(providerCategories),
+                providerSubCategories: Array.from(providerSubCategories),
+                requestCategory: reqCatId,
+                requestSubCategory: reqSubCatId,
+                categoryMatch: catMatch,
+                subCategoryMatch: subCatMatch,
+            };
+
+            if (!catMatch) {
+                report.conclusion.push('Provider does not have a listing in this category');
+            }
+            if (!subCatMatch) {
+                report.conclusion.push('Provider does not have a listing in this subcategory');
+            }
+        } catch (e) {
+            report.checks.categories = { status: 'ERROR', error: e.message };
+        }
+
+        // 5. Check Exclusions
+        if (request.lifecycle?.matching?.declinedProviders) {
+            const declined = request.lifecycle.matching.declinedProviders.map((id: any) => id.toString());
+            if (declined.includes(providerId)) {
+                report.checks.exclusions = { status: 'FAIL', reason: 'Provider declined this request' };
+                report.conclusion.push('Provider has previously declined this request');
+            } else {
+                report.checks.exclusions = { status: 'OK', declined: false };
+            }
+        }
+
+        if (report.conclusion.length === 0) {
+            report.conclusion.push('SHOULD MATCH! If not appearing, check pagination or database indexes.');
+        }
+
+        return report;
+    }
+
 }

@@ -10,6 +10,9 @@ import {
     UploadedFile,
     BadRequestException,
     UseGuards,
+    Query,
+    Inject,
+    forwardRef,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UsersService } from '../services/users.service';
@@ -29,6 +32,8 @@ import { Roles } from '../decorators/roles.decorator';
 import { ParseMongoIdPipe } from '../../common/pipes/parse-mongo-id.pipe';
 import { ApiTags, ApiOperation, ApiConsumes, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { memoryStorage } from 'multer';
+import { Public } from '../../common/decorators/public.decorator';
+import { ListingsService } from '../../marketplace/listings/services/listings.service';
 
 @ApiTags('Users')
 @Controller('users')
@@ -37,7 +42,61 @@ export class UsersController {
         private readonly usersService: UsersService,
         private readonly addressService: AddressService,
         private readonly fcmTokenService: FcmTokenService,
-    ) {}
+        @Inject(forwardRef(() => ListingsService)) private readonly listingsService: ListingsService,
+    ) { }
+
+    @Get('providers/map')
+    @Public()
+    @ApiOperation({ summary: 'Get providers within a map bounding box' })
+    async getMapProviders(
+        @Query('minLat') minLat: string,
+        @Query('maxLat') maxLat: string,
+        @Query('minLng') minLng: string,
+        @Query('maxLng') maxLng: string,
+    ) {
+        if (!minLat || !maxLat || !minLng || !maxLng) {
+            return [];
+        }
+
+        const bounds = {
+            minLat: parseFloat(minLat),
+            maxLat: parseFloat(maxLat),
+            minLng: parseFloat(minLng),
+            maxLng: parseFloat(maxLng),
+        };
+
+        if (isNaN(bounds.minLat) || isNaN(bounds.maxLat) || isNaN(bounds.minLng) || isNaN(bounds.maxLng)) {
+            return [];
+        }
+
+        const providers = await this.usersService.findProvidersInBoundingBox(bounds);
+
+        // Enrich providers with listing categories
+        const enrichedProviders = await Promise.all(
+            providers.map(async (provider: any) => {
+                const listings = await this.listingsService.findByProvider(provider._id.toString());
+
+                const categories = new Set<string>();
+                const subCategories = new Set<string>();
+
+                listings.forEach((listing: any) => {
+                    if (listing.isActive) {
+                        if (listing.categoryId?.name) categories.add(listing.categoryId.name);
+                        if (listing.subCategoryId?.name) subCategories.add(listing.subCategoryId.name);
+                    }
+                });
+
+                return {
+                    ...provider,
+                    categories: Array.from(categories),
+                    subCategories: Array.from(subCategories),
+                };
+            })
+        );
+
+        // Filter out providers with no active listings (categories)
+        return enrichedProviders.filter(p => p.categories.length > 0);
+    }
 
     // ==========================================
     // PUBLIC ENDPOINTS (no auth required)

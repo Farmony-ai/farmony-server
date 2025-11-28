@@ -12,7 +12,7 @@ export class UsersService {
     constructor(
         @InjectModel(User.name) private userModel: Model<UserDocument>,
         private readonly storageService: FirebaseStorageService,
-    ) {}
+    ) { }
 
     // ============================================
     // USER CRUD
@@ -172,5 +172,49 @@ export class UsersService {
 
         user.profilePictureKey = undefined;
         return user.save();
+    }
+
+    /**
+     * Find providers within a bounding box
+     * Searches based on default address or any active address
+     */
+    async findProvidersInBoundingBox(bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number }): Promise<any[]> {
+        const { minLat, maxLat, minLng, maxLng } = bounds;
+
+        // Find users who have role='provider' AND have an address in the box
+        const query = {
+            role: { $in: ['provider', 'individual', 'SHG', 'FPO'] },
+            'addresses.location': {
+                $geoWithin: {
+                    $box: [
+                        [minLng, minLat],
+                        [maxLng, maxLat]
+                    ]
+                }
+            }
+        };
+
+        const users = await this.userModel
+            .find(query)
+            .select('_id name phone role addresses defaultAddressId profilePictureKey')
+            .lean()
+            .limit(500);
+
+        // Transform to return only the relevant location (the one in the box)
+        return users.map(user => {
+            // Find the address that matched (or just take the first one in bounds)
+            const validAddress = user.addresses?.find((addr: any) => {
+                const [lng, lat] = addr.location?.coordinates || [];
+                return lat >= minLat && lat <= maxLat && lng >= minLng && lng <= maxLng;
+            });
+
+            return {
+                _id: user._id,
+                name: user.name,
+                phone: user.phone,
+                location: validAddress?.location,
+                profilePictureUrl: this.storageService.getPublicUrl(user.profilePictureKey),
+            };
+        });
     }
 }

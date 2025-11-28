@@ -10,6 +10,7 @@ import { ServiceRequestsService } from './services/service-requests.service';
 import { OrdersService } from './services/orders.service';
 import { ServiceRequestsController } from './controllers/service-requests.controller';
 import { OrdersController } from './controllers/orders.controller';
+import { PublicServiceRequestsController } from './controllers/public-service-requests.controller';
 
 @Module({
     imports: [
@@ -23,7 +24,7 @@ import { OrdersController } from './controllers/orders.controller';
         ]),
     ],
     providers: [ServiceRequestsService, OrdersService],
-    controllers: [ServiceRequestsController, OrdersController],
+    controllers: [ServiceRequestsController, OrdersController, PublicServiceRequestsController],
     exports: [ServiceRequestsService, OrdersService],
 })
-export class ServiceRequestsModule {}
+export class ServiceRequestsModule { }
