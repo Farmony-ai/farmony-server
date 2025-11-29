@@ -492,7 +492,7 @@ export class ServiceRequestsService {
         // But for $geoWithin $box it's simpler: [[minLng, minLat], [maxLng, maxLat]]
 
         const query = {
-            status: { $in: [ServiceRequestStatus.OPEN, ServiceRequestStatus.MATCHED, 'no_providers_available'] },
+            status: { $in: [ServiceRequestStatus.OPEN, ServiceRequestStatus.MATCHED] },
             expiresAt: { $gt: new Date() },
             location: {
                 $geoWithin: {
@@ -506,7 +506,7 @@ export class ServiceRequestsService {
 
         const requests = await this.serviceRequestModel
             .find(query)
-            .select('_id title location status categoryId subCategoryId') // Select only needed fields
+            .select('_id title location status categoryId subCategoryId expiresAt') // Select only needed fields
             .populate('categoryId', 'name icon')
             .lean()
             .limit(500); // Safety limit

@@ -200,7 +200,6 @@ export class ProvidersService {
                 pendingBookings,
                 upcomingBookings,
                 recentBookings: [...pendingBookings, ...upcomingBookings].slice(0, 5),
-                recentBookings: [...pendingBookings, ...upcomingBookings].slice(0, 5),
                 availableServiceRequests: availableRequests.map(req => {
                     let distance = null;
                     if (providerCoordinates && req.location?.coordinates) {
@@ -309,6 +308,9 @@ export class ProvidersService {
                 const wasNotified = legacyNotified || lifecycleNotified;
 
                 if (!wasNotified) return false;
+
+                // Check if request is expired
+                if (new Date(request.expiresAt) <= new Date()) return false;
 
                 // Check if category matches
                 const requestCategoryId = request.categoryId?._id?.toString() || request.categoryId?.toString();
