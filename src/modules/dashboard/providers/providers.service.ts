@@ -299,7 +299,8 @@ export class ProvidersService {
 
             // Filter requests where:
             // 1. Provider was notified
-            // 2. Category AND subcategory match provider's listings
+            // 2. Provider has NOT declined
+            // 3. Category AND subcategory match provider's listings
             const relevantRequests = result.requests.filter((request: any) => {
                 // Check if provider was notified (check both legacy and lifecycle fields)
                 const legacyNotified = request.allNotifiedProviders?.some((pid: any) => pid.toString() === providerId);
@@ -308,6 +309,12 @@ export class ProvidersService {
                 const wasNotified = legacyNotified || lifecycleNotified;
 
                 if (!wasNotified) return false;
+
+                // Check if provider has declined this request
+                const legacyDeclined = request.declinedProviders?.some((pid: any) => pid.toString() === providerId);
+                const lifecycleDeclined = request.lifecycle?.matching?.declinedProviders?.some((pid: any) => pid.toString() === providerId);
+
+                if (legacyDeclined || lifecycleDeclined) return false;
 
                 // Check if request is expired
                 if (new Date(request.expiresAt) <= new Date()) return false;
