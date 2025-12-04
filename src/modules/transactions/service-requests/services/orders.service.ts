@@ -78,11 +78,11 @@ export class OrdersService {
     }
 
     async findBySeeker(seekerId: string): Promise<Order[]> {
-        return this.orderModel.find({ seekerId }).sort({ createdAt: -1 }).exec();
+        return this.orderModel.find({ seekerId: new Types.ObjectId(seekerId) }).sort({ createdAt: -1 }).exec();
     }
 
     async findByProvider(providerId: string): Promise<Order[]> {
-        return this.orderModel.find({ providerId }).sort({ createdAt: -1 }).exec();
+        return this.orderModel.find({ providerId: new Types.ObjectId(providerId) }).sort({ createdAt: -1 }).exec();
     }
 
     async updateStatus(id: string, dto: UpdateOrderStatusDto): Promise<Order> {
@@ -122,10 +122,11 @@ export class OrdersService {
         fulfilledOrders: number;
         revenue: number;
     }> {
-        const totalOrders = await this.orderModel.countDocuments({ providerId }).exec();
+        const providerObjectId = new Types.ObjectId(providerId);
+        const totalOrders = await this.orderModel.countDocuments({ providerId: providerObjectId }).exec();
         const fulfilledOrders = await this.orderModel
             .countDocuments({
-                providerId,
+                providerId: providerObjectId,
                 status: OrderStatus.COMPLETED,
             })
             .exec();
@@ -176,7 +177,7 @@ export class OrdersService {
 
     async findByProviderPopulated(providerId: string): Promise<any[]> {
         return this.orderModel
-            .find({ providerId })
+            .find({ providerId: new Types.ObjectId(providerId) })
             .populate('seekerId', 'name email phone address coordinates')
             .populate('listingId', 'title description price unitOfMeasure images category')
             .sort({ createdAt: -1 })
@@ -186,7 +187,7 @@ export class OrdersService {
 
     async findBySeekerPopulated(seekerId: string): Promise<any[]> {
         return this.orderModel
-            .find({ seekerId })
+            .find({ seekerId: new Types.ObjectId(seekerId) })
             .populate('providerId', 'name email phone address coordinates')
             .populate({
                 path: 'listingId',
