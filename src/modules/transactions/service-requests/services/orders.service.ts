@@ -60,7 +60,7 @@ export class OrdersService {
             metadata: data.metadata,
             createdAt: now,
             requestExpiresAt,
-            status: OrderStatus.PENDING,
+            status: OrderStatus.ACCEPTED,
             orderType: 'service',
         });
 
