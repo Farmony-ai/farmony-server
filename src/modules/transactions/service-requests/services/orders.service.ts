@@ -123,7 +123,11 @@ export class OrdersService {
         revenue: number;
     }> {
         const providerObjectId = new Types.ObjectId(providerId);
-        const totalOrders = await this.orderModel.countDocuments({ providerId: providerObjectId }).exec();
+        // Only count orders that are accepted or beyond (exclude pending)
+        const totalOrders = await this.orderModel.countDocuments({
+            providerId: providerObjectId,
+            status: { $ne: OrderStatus.PENDING },
+        }).exec();
         const fulfilledOrders = await this.orderModel
             .countDocuments({
                 providerId: providerObjectId,
@@ -132,7 +136,7 @@ export class OrdersService {
             .exec();
 
         const agg = await this.orderModel
-            .aggregate([{ $match: { providerId: new Types.ObjectId(providerId), status: OrderStatus.COMPLETED } }, { $group: { _id: null, total: { $sum: '$totalAmount' } } }])
+            .aggregate([{ $match: { providerId: providerObjectId, status: OrderStatus.COMPLETED } }, { $group: { _id: null, total: { $sum: '$totalAmount' } } }])
             .exec();
 
         const revenue = agg[0]?.total || 0;
