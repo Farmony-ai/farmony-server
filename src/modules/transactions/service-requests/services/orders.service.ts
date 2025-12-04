@@ -60,7 +60,7 @@ export class OrdersService {
             metadata: data.metadata,
             createdAt: now,
             requestExpiresAt,
-            status: OrderStatus.PENDING,
+            status: OrderStatus.ACCEPTED,
             orderType: 'service',
         });
 
@@ -78,11 +78,11 @@ export class OrdersService {
     }
 
     async findBySeeker(seekerId: string): Promise<Order[]> {
-        return this.orderModel.find({ seekerId }).sort({ createdAt: -1 }).exec();
+        return this.orderModel.find({ seekerId: new Types.ObjectId(seekerId) }).sort({ createdAt: -1 }).exec();
     }
 
     async findByProvider(providerId: string): Promise<Order[]> {
-        return this.orderModel.find({ providerId }).sort({ createdAt: -1 }).exec();
+        return this.orderModel.find({ providerId: new Types.ObjectId(providerId) }).sort({ createdAt: -1 }).exec();
     }
 
     async updateStatus(id: string, dto: UpdateOrderStatusDto): Promise<Order> {
@@ -122,16 +122,21 @@ export class OrdersService {
         fulfilledOrders: number;
         revenue: number;
     }> {
-        const totalOrders = await this.orderModel.countDocuments({ providerId }).exec();
+        const providerObjectId = new Types.ObjectId(providerId);
+        // Only count orders that are accepted or beyond (exclude pending)
+        const totalOrders = await this.orderModel.countDocuments({
+            providerId: providerObjectId,
+            status: { $ne: OrderStatus.PENDING },
+        }).exec();
         const fulfilledOrders = await this.orderModel
             .countDocuments({
-                providerId,
+                providerId: providerObjectId,
                 status: OrderStatus.COMPLETED,
             })
             .exec();
 
         const agg = await this.orderModel
-            .aggregate([{ $match: { providerId: new Types.ObjectId(providerId), status: OrderStatus.COMPLETED } }, { $group: { _id: null, total: { $sum: '$totalAmount' } } }])
+            .aggregate([{ $match: { providerId: providerObjectId, status: OrderStatus.COMPLETED } }, { $group: { _id: null, total: { $sum: '$totalAmount' } } }])
             .exec();
 
         const revenue = agg[0]?.total || 0;
@@ -176,7 +181,7 @@ export class OrdersService {
 
     async findByProviderPopulated(providerId: string): Promise<any[]> {
         return this.orderModel
-            .find({ providerId })
+            .find({ providerId: new Types.ObjectId(providerId) })
             .populate('seekerId', 'name email phone address coordinates')
             .populate('listingId', 'title description price unitOfMeasure images category')
             .sort({ createdAt: -1 })
@@ -186,7 +191,7 @@ export class OrdersService {
 
     async findBySeekerPopulated(seekerId: string): Promise<any[]> {
         return this.orderModel
-            .find({ seekerId })
+            .find({ seekerId: new Types.ObjectId(seekerId) })
             .populate('providerId', 'name email phone address coordinates')
             .populate({
                 path: 'listingId',

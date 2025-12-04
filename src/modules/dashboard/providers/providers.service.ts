@@ -6,6 +6,7 @@ import { Types } from 'mongoose';
 import { UsersService } from '../../identity/services/users.service';
 import { ServiceRequestsService } from '../../transactions/service-requests/services/service-requests.service';
 import { UpdatePreferencesDto } from '../../identity/dto/update-preferences.dto';
+import { ServiceRequestStatus } from '../../transactions/service-requests/schemas/service-request.entity';
 
 @Injectable()
 export class ProvidersService {
@@ -15,7 +16,7 @@ export class ProvidersService {
         private readonly usersService: UsersService,
         @Inject(forwardRef(() => ServiceRequestsService))
         private readonly serviceRequestsService: ServiceRequestsService
-    ) {}
+    ) { }
 
     // Helper function to calculate distance between coordinates
     private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -127,25 +128,25 @@ export class ProvidersService {
                     // Listing details with correct field names
                     listing: booking.listingDetails
                         ? {
-                              _id: booking.listingDetails?._id || booking.listingId,
-                              title: booking.listingDetails?.title || 'Service',
-                              description: booking.listingDetails?.description || '',
-                              price: booking.listingDetails?.price || booking.totalAmount,
-                              unitOfMeasure: booking.listingDetails?.unitOfMeasure || booking.unitOfMeasure,
-                              category: booking.listingDetails?.category || '',
-                              images: booking.listingDetails?.photoUrls || [],
-                              thumbnailUrl: booking.listingDetails?.photoUrls?.[0] || null,
-                          }
+                            _id: booking.listingDetails?._id || booking.listingId,
+                            title: booking.listingDetails?.title || 'Service',
+                            description: booking.listingDetails?.description || '',
+                            price: booking.listingDetails?.price || booking.totalAmount,
+                            unitOfMeasure: booking.listingDetails?.unitOfMeasure || booking.unitOfMeasure,
+                            category: booking.listingDetails?.category || '',
+                            images: booking.listingDetails?.photoUrls || [],
+                            thumbnailUrl: booking.listingDetails?.photoUrls?.[0] || null,
+                        }
                         : null,
 
                     // Service request details if applicable
                     serviceRequest: booking.serviceRequestDetails
                         ? {
-                              title: booking.serviceRequestDetails.title,
-                              description: booking.serviceRequestDetails.description,
-                              address: booking.serviceRequestDetails.address,
-                              metadata: booking.serviceRequestDetails.metadata,
-                          }
+                            title: booking.serviceRequestDetails.title,
+                            description: booking.serviceRequestDetails.description,
+                            address: booking.serviceRequestDetails.address,
+                            metadata: booking.serviceRequestDetails.metadata,
+                        }
                         : null,
 
                     // Distance calculation
@@ -199,7 +200,18 @@ export class ProvidersService {
                 pendingBookings,
                 upcomingBookings,
                 recentBookings: [...pendingBookings, ...upcomingBookings].slice(0, 5),
-                availableServiceRequests: availableRequests.slice(0, 5), // Top 5 available requests
+                availableServiceRequests: availableRequests.map(req => {
+                    let distance = null;
+                    if (providerCoordinates && req.location?.coordinates) {
+                        try {
+                            distance = this.calculateDistance(
+                                providerCoordinates[1], providerCoordinates[0],
+                                req.location.coordinates[1], req.location.coordinates[0]
+                            );
+                        } catch (e) { }
+                    }
+                    return { ...req, distance };
+                }).slice(0, 5), // Top 5 available requests
                 activeServiceRequests: acceptedRequests.slice(0, 5), // Top 5 accepted requests
             };
         } catch (error) {
@@ -280,19 +292,32 @@ export class ProvidersService {
 
             // Get all matched service requests
             const result = await this.serviceRequestsService.findAll({
-                status: 'MATCHED' as any,
+                status: ServiceRequestStatus.MATCHED,
                 page: 1,
                 limit: 100,
             });
 
             // Filter requests where:
             // 1. Provider was notified
-            // 2. Category AND subcategory match provider's listings
+            // 2. Provider has NOT declined
+            // 3. Category AND subcategory match provider's listings
             const relevantRequests = result.requests.filter((request: any) => {
-                // Check if provider was notified
-                const wasNotified = request.allNotifiedProviders?.some((pid: any) => pid.toString() === providerId);
+                // Check if provider was notified (check both legacy and lifecycle fields)
+                const legacyNotified = request.allNotifiedProviders?.some((pid: any) => pid.toString() === providerId);
+                const lifecycleNotified = request.lifecycle?.matching?.allNotifiedProviders?.some((pid: any) => pid.toString() === providerId);
+
+                const wasNotified = legacyNotified || lifecycleNotified;
 
                 if (!wasNotified) return false;
+
+                // Check if provider has declined this request
+                const legacyDeclined = request.declinedProviders?.some((pid: any) => pid.toString() === providerId);
+                const lifecycleDeclined = request.lifecycle?.matching?.declinedProviders?.some((pid: any) => pid.toString() === providerId);
+
+                if (legacyDeclined || lifecycleDeclined) return false;
+
+                // Check if request is expired
+                if (new Date(request.expiresAt) <= new Date()) return false;
 
                 // Check if category matches
                 const requestCategoryId = request.categoryId?._id?.toString() || request.categoryId?.toString();

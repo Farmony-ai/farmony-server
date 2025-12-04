@@ -1,5 +1,5 @@
 // src/modules/marketplace/listings/services/listings.service.ts
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Listing, ListingDocument } from '../schemas/listings.schema';
@@ -36,9 +36,9 @@ export class ListingsService {
         @InjectModel(Listing.name) private listingModel: Model<ListingDocument>,
         @InjectModel(Catalogue.name) private catalogueModel: Model<CatalogueDocument>,
         private readonly storageService: FirebaseStorageService,
-        private readonly usersService: UsersService,
+        @Inject(forwardRef(() => UsersService)) private readonly usersService: UsersService,
         private readonly geoService: GeoService
-    ) {}
+    ) { }
 
     async create(dto: CreateListingDto, files: Array<Express.Multer.File> = []): Promise<any> {
         // Validate providerId
@@ -345,7 +345,7 @@ export class ListingsService {
             throw new BadRequestException('Invalid provider ID');
         }
 
-        const listings = await this.listingModel.find({ providerId }).populate('categoryId', 'name').populate('subCategoryId', 'name').sort({ createdAt: -1 }).exec();
+        const listings = await this.listingModel.find({ providerId: new Types.ObjectId(providerId) }).populate('categoryId', 'name').populate('subCategoryId', 'name').sort({ createdAt: -1 }).exec();
 
         return listings.map((listing) => this.transformWithPublicUrls(listing));
     }

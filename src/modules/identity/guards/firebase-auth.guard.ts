@@ -1,4 +1,6 @@
 import { Injectable, CanActivate, ExecutionContext, UnauthorizedException, Logger } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { FirebaseAdminService } from '../../common/firebase/firebase-admin.service';
@@ -11,9 +13,18 @@ export class FirebaseAuthGuard implements CanActivate {
     constructor(
         private readonly firebaseAdmin: FirebaseAdminService,
         @InjectModel(User.name) private userModel: Model<UserDocument>,
-    ) {}
+        private readonly reflector: Reflector,
+    ) { }
 
     async canActivate(context: ExecutionContext): Promise<boolean> {
+        const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+            context.getHandler(),
+            context.getClass(),
+        ]);
+        if (isPublic) {
+            return true;
+        }
+
         const request = context.switchToHttp().getRequest();
         const authHeader = request.headers.authorization;
 
