@@ -59,4 +59,25 @@ export class FcmTokenService {
         }
         return tokenMap;
     }
+
+    /**
+     * Remove multiple invalid tokens from users
+     * Called after FCM send failures to clean up stale tokens
+     */
+    async removeInvalidTokens(tokens: string[]): Promise<void> {
+        if (!tokens || tokens.length === 0) return;
+
+        try {
+            // Remove tokens from all users who have them
+            const result = await this.userModel
+                .updateMany({ fcmTokens: { $in: tokens } }, { $pull: { fcmTokens: { $in: tokens } } })
+                .exec();
+
+            if (result.modifiedCount > 0) {
+                console.log(`Removed ${tokens.length} invalid FCM tokens from ${result.modifiedCount} users`);
+            }
+        } catch (error) {
+            console.error('Failed to remove invalid FCM tokens:', error);
+        }
+    }
 }

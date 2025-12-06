@@ -183,7 +183,11 @@ export class ServiceRequestsController {
         const request = await this.serviceRequestsService.findById(id);
 
         // Check if user has access to view this request
-        const isSeeker = request.seekerId.toString() === userId;
+        // seekerId may be populated (object with _id) or unpopulated (ObjectId)
+        const seekerIdStr = typeof request.seekerId === 'object' && request.seekerId !== null
+            ? (request.seekerId as any)._id?.toString() || request.seekerId.toString()
+            : request.seekerId?.toString();
+        const isSeeker = seekerIdStr === userId;
         const isNotifiedProvider = (request as any).lifecycle?.matching?.allNotifiedProviders?.some((pid: any) => pid.toString() === userId);
 
         if (!isSeeker && !isNotifiedProvider) {

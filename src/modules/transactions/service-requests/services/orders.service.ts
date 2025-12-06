@@ -1,14 +1,17 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Cron } from '@nestjs/schedule';
 import { Order, OrderDocument } from '../schemas/orders.schema';
 import { CreateOrderDto, OrderStatus } from '../dto/create-order.dto';
 import { UpdateOrderStatusDto } from '../dto/update-order-status.dto';
+import { NotificationService } from '../../../engagement/notifications/services/notification.service';
 
 @Injectable()
 export class OrdersService {
-    constructor(@InjectModel(Order.name) private orderModel: Model<OrderDocument>) {}
+    constructor(
+        @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
+        private readonly notificationService: NotificationService,
+    ) {}
 
     async create(dto: CreateOrderDto): Promise<Order> {
         const now = new Date();
@@ -86,7 +89,15 @@ export class OrdersService {
     }
 
     async updateStatus(id: string, dto: UpdateOrderStatusDto): Promise<Order> {
-        const order = await this.findById(id);
+        // Fetch order with populated data for notifications
+        const order = await this.orderModel
+            .findById(id)
+            .populate('seekerId', 'name')
+            .populate('providerId', 'name')
+            .populate('listingId', 'title')
+            .exec();
+
+        if (!order) throw new NotFoundException('Order not found');
 
         // Validate status transitions
         if (!this.isValidStatusTransition(order.status, dto.status)) {
@@ -95,6 +106,13 @@ export class OrdersService {
 
         const updateData: any = { status: dto.status };
 
+        // Extract names for notifications
+        const seekerId = order.seekerId?._id?.toString() || (order.seekerId as any)?.toString();
+        const providerId = order.providerId?._id?.toString() || (order.providerId as any)?.toString();
+        const seekerName = (order.seekerId as any)?.name || 'Customer';
+        const providerName = (order.providerId as any)?.name || 'Provider';
+        const serviceName = (order.listingId as any)?.title || order.description || 'Service';
+
         // Add timestamps based on status
         switch (dto.status) {
             case OrderStatus.ACCEPTED:
@@ -102,9 +120,41 @@ export class OrdersService {
                 break;
             case OrderStatus.PAID:
                 updateData.paidAt = new Date();
+                // Notify provider about payment
+                if (providerId && seekerId) {
+                    this.notificationService.notifyProviderPaymentReceived(providerId, {
+                        orderId: id,
+                        amount: order.totalAmount,
+                        seekerName,
+                    });
+                }
+                break;
+            case OrderStatus.IN_PROGRESS:
+                // Notify seeker that service has started
+                if (seekerId && providerId) {
+                    this.notificationService.notifySeekerOrderInProgress(seekerId, {
+                        orderId: id,
+                        requestId: order.serviceRequestId,
+                        providerName,
+                        serviceName,
+                    });
+                }
                 break;
             case OrderStatus.COMPLETED:
                 updateData.completedAt = new Date();
+                // Notify both parties
+                if (seekerId && providerId) {
+                    this.notificationService.notifySeekerOrderCompleted(seekerId, {
+                        orderId: id,
+                        providerName,
+                        serviceName,
+                    });
+                    this.notificationService.notifyProviderOrderCompleted(providerId, {
+                        orderId: id,
+                        seekerName,
+                        serviceName,
+                    });
+                }
                 break;
             case OrderStatus.CANCELED:
                 updateData.canceledAt = new Date();
@@ -171,7 +221,8 @@ export class OrdersService {
         const validTransitions: Record<string, string[]> = {
             [OrderStatus.PENDING]: [OrderStatus.ACCEPTED, OrderStatus.CANCELED],
             [OrderStatus.ACCEPTED]: [OrderStatus.PAID, OrderStatus.CANCELED],
-            [OrderStatus.PAID]: [OrderStatus.COMPLETED, OrderStatus.CANCELED],
+            [OrderStatus.PAID]: [OrderStatus.IN_PROGRESS, OrderStatus.COMPLETED, OrderStatus.CANCELED],
+            [OrderStatus.IN_PROGRESS]: [OrderStatus.COMPLETED, OrderStatus.CANCELED],
             [OrderStatus.COMPLETED]: [], // No transitions from completed
             [OrderStatus.CANCELED]: [], // No transitions from canceled
         };

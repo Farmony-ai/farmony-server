@@ -370,21 +370,23 @@ export class FirebaseAdminService implements OnModuleInit {
      * @param tokens - Array of FCM device tokens
      * @param notification - Notification payload
      * @param data - Optional data payload
-     * @returns Batch response with success/failure details
+     * @returns Object containing batch response and array of invalid tokens that should be removed
      */
     async sendMulticastNotification(
         tokens: string[],
         notification: { title: string; body: string; imageUrl?: string },
         data?: Record<string, string>
-    ): Promise<admin.messaging.BatchResponse | null> {
+    ): Promise<{ response: admin.messaging.BatchResponse | null; invalidTokens: string[] }> {
+        const invalidTokens: string[] = [];
+
         if (!this.firebaseApp) {
             this.logger.warn('Firebase not initialized - cannot send notifications');
-            return null;
+            return { response: null, invalidTokens };
         }
 
         if (!tokens || tokens.length === 0) {
             this.logger.warn('No tokens provided - cannot send notifications');
-            return null;
+            return { response: null, invalidTokens };
         }
 
         try {
@@ -408,19 +410,30 @@ export class FirebaseAdminService implements OnModuleInit {
             const response = await this.getMessaging().sendEachForMulticast(message);
             this.logger.log(`Notifications sent: ${response.successCount} successful, ${response.failureCount} failed`);
 
-            // Log failed tokens for debugging
+            // Identify invalid tokens for cleanup
             if (response.failureCount > 0) {
                 response.responses.forEach((resp, idx) => {
                     if (!resp.success) {
-                        this.logger.error(`Failed to send to token ${tokens[idx]}: ${resp.error?.message}`);
+                        const errorCode = resp.error?.code;
+                        // These error codes indicate the token is invalid and should be removed
+                        if (
+                            errorCode === 'messaging/registration-token-not-registered' ||
+                            errorCode === 'messaging/invalid-registration-token' ||
+                            errorCode === 'messaging/invalid-argument'
+                        ) {
+                            invalidTokens.push(tokens[idx]);
+                            this.logger.warn(`Invalid FCM token detected: ${tokens[idx].substring(0, 20)}...`);
+                        } else {
+                            this.logger.error(`Failed to send to token ${tokens[idx]}: ${resp.error?.message}`);
+                        }
                     }
                 });
             }
 
-            return response;
+            return { response, invalidTokens };
         } catch (error) {
             this.logger.error('Failed to send multicast notification:', error);
-            return null;
+            return { response: null, invalidTokens };
         }
     }
 

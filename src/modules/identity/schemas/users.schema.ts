@@ -6,6 +6,26 @@ import { GeoPointDto } from '../../common/geo/geo.dto';
 export type UserDocument = User & Document & { _id: Types.ObjectId };
 
 @Schema({ _id: false })
+export class NotificationPreferences {
+    @Prop({ type: Boolean, default: true })
+    serviceRequestUpdates: boolean; // Accepted, expired, no providers
+
+    @Prop({ type: Boolean, default: true })
+    newOpportunities: boolean; // New service requests for providers
+
+    @Prop({ type: Boolean, default: true })
+    orderStatusUpdates: boolean; // In progress, completed
+
+    @Prop({ type: Boolean, default: true })
+    paymentUpdates: boolean; // Payment received
+
+    @Prop({ type: Boolean, default: true })
+    reviewUpdates: boolean; // New reviews
+}
+
+const NotificationPreferencesSchema = SchemaFactory.createForClass(NotificationPreferences);
+
+@Schema({ _id: false })
 export class UserPreferences {
     @Prop({ type: String, default: 'seeker', enum: ['provider', 'seeker'] })
     defaultLandingPage: string;
@@ -18,6 +38,9 @@ export class UserPreferences {
 
     @Prop({ type: Boolean, default: true })
     notificationsEnabled: boolean;
+
+    @Prop({ type: NotificationPreferencesSchema, default: () => ({}) })
+    notificationPreferences: NotificationPreferences;
 }
 
 const UserPreferencesSchema = SchemaFactory.createForClass(UserPreferences);
