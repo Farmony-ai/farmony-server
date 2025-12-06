@@ -98,6 +98,7 @@ export class ListingsService {
 
         const listing = new this.listingModel({
             ...dto,
+            providerId: new Types.ObjectId(dto.providerId), // Explicit conversion to ObjectId
             photos: photoKeys,
             location: locationData,
             serviceAddressId: new Types.ObjectId(serviceAddressId), // Link to address
