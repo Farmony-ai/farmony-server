@@ -17,9 +17,19 @@ export class SeekerService {
         // Extract service requests from paginated result
         const serviceRequests = serviceRequestsResult.requests || [];
 
+        // Create a set of service request IDs that are already associated with an order
+        const serviceRequestIdsFromOrders = new Set(
+            orders.map(order => (order as any).serviceRequestId).filter(id => !!id)
+        );
+
+        // Filter out service requests that have already been converted to orders
+        const filteredServiceRequests = serviceRequests.filter(
+            req => !serviceRequestIdsFromOrders.has(req._id.toString())
+        );
+
         // Map and merge with unified structure
         const mappedOrders = orders.map((order) => this.mapOrderToUnified(order));
-        const mappedRequests = serviceRequests.map((req) => this.mapServiceRequestToUnified(req));
+        const mappedRequests = filteredServiceRequests.map((req) => this.mapServiceRequestToUnified(req));
 
         // Combine and sort by date (newest first)
         return [...mappedOrders, ...mappedRequests].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
@@ -64,6 +74,7 @@ export class SeekerService {
             orderType: order.orderType,
             quantity: order.quantity,
             unitOfMeasure: order.unitOfMeasure,
+            serviceRequestId: (order as any).serviceRequestId,
         };
     }
 

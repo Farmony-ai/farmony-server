@@ -134,4 +134,7 @@ export class UnifiedBookingDto {
 
   @ApiPropertyOptional({ description: 'Associated order ID', example: '507f1f77bcf86cd799439013' })
   orderId?: string;
+
+  @ApiPropertyOptional({ description: 'Associated service request ID', example: '507f1f77bcf86cd799439014' })
+  serviceRequestId?: string;
 }

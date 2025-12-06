@@ -5,12 +5,14 @@ import { Order, OrderDocument } from '../schemas/orders.schema';
 import { CreateOrderDto, OrderStatus } from '../dto/create-order.dto';
 import { UpdateOrderStatusDto } from '../dto/update-order-status.dto';
 import { NotificationService } from '../../../engagement/notifications/services/notification.service';
+import { FirebaseStorageService } from '../../../common/firebase/firebase-storage.service';
 
 @Injectable()
 export class OrdersService {
     constructor(
         @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
         private readonly notificationService: NotificationService,
+        private readonly storageService: FirebaseStorageService,
     ) {}
 
     async create(dto: CreateOrderDto): Promise<Order> {
@@ -75,9 +77,28 @@ export class OrdersService {
     }
 
     async findById(id: string): Promise<Order> {
-        const order = await this.orderModel.findById(id).exec();
+        const order = await this.orderModel.findById(id)
+            .populate('seekerId', 'name phone email')
+            .populate('providerId', 'name phone email')
+            .populate({
+                path: 'listingId',
+                select: 'title description price unitOfMeasure photos categoryId subCategoryId',
+                populate: [
+                    { path: 'categoryId', select: 'name' },
+                    { path: 'subCategoryId', select: 'name' },
+                ],
+            })
+            .exec();
         if (!order) throw new NotFoundException('Order not found');
-        return order;
+
+        const orderObj = order.toObject();
+
+        if (orderObj.listingId && (orderObj.listingId as any).photos) {
+            const listing = orderObj.listingId as any;
+            listing.photoUrls = this.storageService.getPublicUrls(listing.photos);
+        }
+
+        return orderObj as Order;
     }
 
     async findBySeeker(seekerId: string): Promise<Order[]> {

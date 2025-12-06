@@ -41,151 +41,13 @@ export class ProvidersService {
             const listings = await this.listingsService.findByProvider(providerId);
             const activeListings = listings.filter((l) => l.isActive).length;
 
-            // Get average rating
-            // TODO: Ratings will be implemented in engagement/ratings module
-            const ratings = [];
-            const avgRating = 0;
-
-            // Get all bookings/orders
-            const allBookings = await this.ordersService.findByProvider(providerId);
-
             // Get available service requests for provider
             const availableRequests = await this.getAvailableServiceRequests(providerId);
 
             // Get accepted service requests (orders from service requests)
             const acceptedRequests = await this.getAcceptedServiceRequests(providerId);
 
-            // Manually fetch and enhance booking data
-            const enhancedBookings = await Promise.all(
-                allBookings.map(async (booking) => {
-                    let seekerDetails = null;
-                    let listingDetails = null;
-                    let serviceRequestDetails = null;
-
-                    try {
-                        // Fetch seeker details
-                        seekerDetails = await this.usersService.findById(booking.seekerId.toString());
-                    } catch (error) {
-                        console.error(`Failed to fetch seeker ${booking.seekerId}:`, error);
-                    }
-
-                    // Check if this is from a service request or direct booking
-                    if ((booking as any).serviceRequestId) {
-                        try {
-                            serviceRequestDetails = await this.serviceRequestsService.findById((booking as any).serviceRequestId);
-                        } catch (error) {
-                            console.error(`Failed to fetch service request:`, error);
-                        }
-                    }
-
-                    if (booking.listingId) {
-                        try {
-                            listingDetails = await this.listingsService.findById(booking.listingId.toString());
-                        } catch (error) {
-                            console.error(`Failed to fetch listing ${booking.listingId}:`, error);
-                        }
-                    }
-
-                    const enhanced = {
-                        ...((booking as any).toObject ? (booking as any).toObject() : booking),
-                        seekerDetails,
-                        listingDetails,
-                        serviceRequestDetails,
-                        isServiceRequest: !!(booking as any).serviceRequestId,
-                    };
-                    return enhanced;
-                })
-            );
-
-            // Process and enhance bookings with distance calculation
-            const enhanceBooking = (booking: any) => {
-                const enhanced = {
-                    _id: booking._id,
-                    status: booking.status,
-                    orderType: booking.orderType,
-                    createdAt: booking.createdAt,
-                    requestExpiresAt: booking.requestExpiresAt,
-                    serviceStartDate: booking.serviceStartDate,
-                    serviceEndDate: booking.serviceEndDate,
-                    quantity: booking.quantity,
-                    unitOfMeasure: booking.unitOfMeasure,
-                    totalAmount: booking.totalAmount,
-                    isAutoRejected: booking.isAutoRejected,
-                    coordinates: booking.coordinates,
-                    isServiceRequest: booking.isServiceRequest,
-
-                    // Seeker details
-                    seeker: {
-                        _id: booking.seekerDetails?._id || booking.seekerId,
-                        name: booking.seekerDetails?.name || 'Unknown',
-                        phone: booking.seekerDetails?.phone || '',
-                        email: booking.seekerDetails?.email || '',
-                        location:
-                            booking.seekerDetails?.address?.village || booking.seekerDetails?.address?.city || booking.seekerDetails?.address?.district || 'Location not available',
-                        coordinates: booking.seekerDetails?.coordinates || booking.seekerDetails?.address?.coordinates || null,
-                    },
-
-                    // Listing details with correct field names
-                    listing: booking.listingDetails
-                        ? {
-                            _id: booking.listingDetails?._id || booking.listingId,
-                            title: booking.listingDetails?.title || 'Service',
-                            description: booking.listingDetails?.description || '',
-                            price: booking.listingDetails?.price || booking.totalAmount,
-                            unitOfMeasure: booking.listingDetails?.unitOfMeasure || booking.unitOfMeasure,
-                            category: booking.listingDetails?.category || '',
-                            images: booking.listingDetails?.photoUrls || [],
-                            thumbnailUrl: booking.listingDetails?.photoUrls?.[0] || null,
-                        }
-                        : null,
-
-                    // Service request details if applicable
-                    serviceRequest: booking.serviceRequestDetails
-                        ? {
-                            title: booking.serviceRequestDetails.title,
-                            description: booking.serviceRequestDetails.description,
-                            address: booking.serviceRequestDetails.address,
-                            metadata: booking.serviceRequestDetails.metadata,
-                        }
-                        : null,
-
-                    // Distance calculation
-                    distance: null as number | null,
-                };
-
-                // Calculate distance if coordinates available
-                if (providerCoordinates && booking.coordinates && booking.coordinates.length === 2) {
-                    try {
-                        enhanced.distance = this.calculateDistance(
-                            providerCoordinates[1], // lat
-                            providerCoordinates[0], // lon
-                            booking.coordinates[1],
-                            booking.coordinates[0]
-                        );
-                    } catch (error) {
-                        console.error('Distance calculation error:', error);
-                    }
-                }
-
-                return enhanced;
-            };
-
-            // Separate and enhance bookings by status
-            const pendingBookings = enhancedBookings
-                .filter((b) => b.status === 'pending')
-                .map(enhanceBooking)
-                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                .slice(0, 10);
-
-            const upcomingBookings = enhancedBookings
-                .filter((b) => ['accepted', 'paid'].includes(b.status))
-                .map(enhanceBooking)
-                .sort((a, b) => {
-                    const dateA = a.serviceStartDate || a.createdAt;
-                    const dateB = b.serviceStartDate || b.createdAt;
-                    return new Date(dateA).getTime() - new Date(dateB).getTime();
-                })
-                .slice(0, 10);
+            // Remove logic for pendingBookings, upcomingBookings, recentBookings
 
             return {
                 summary: {
@@ -193,13 +55,10 @@ export class ProvidersService {
                     completedBookings: summary.fulfilledOrders,
                     revenue: summary.revenue,
                     activeListings,
-                    averageRating: Number(avgRating.toFixed(1)),
-                    totalRatings: ratings.length,
+                    averageRating: 0, // Placeholder as ratings module is TODO
+                    totalRatings: 0, // Placeholder
                     availableServiceRequests: availableRequests.length,
                 },
-                pendingBookings,
-                upcomingBookings,
-                recentBookings: [...pendingBookings, ...upcomingBookings].slice(0, 5),
                 availableServiceRequests: availableRequests.map(req => {
                     let distance = null;
                     if (providerCoordinates && req.location?.coordinates) {
@@ -211,7 +70,7 @@ export class ProvidersService {
                         } catch (e) { }
                     }
                     return { ...req, distance };
-                }).slice(0, 5), // Top 5 available requests
+                }),
                 activeServiceRequests: acceptedRequests.slice(0, 5), // Top 5 accepted requests
             };
         } catch (error) {
