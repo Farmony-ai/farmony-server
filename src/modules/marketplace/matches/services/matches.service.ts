@@ -60,7 +60,7 @@ export class MatchesService {
         const requestId = randomUUID();
 
         // Transaction-like behavior without requiring Mongo transactions: use unique idempotency_key
-        let existing: MatchRequestDocument | null = null;
+        let existing: any = null;
         if (idempotencyKey) {
             existing = await this.matchRequestModel.findOne({ idempotency_key: idempotencyKey }).lean();
             if (existing) {

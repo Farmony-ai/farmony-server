@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Order, OrderDocument } from '../schemas/orders.schema';
@@ -6,13 +6,17 @@ import { CreateOrderDto, OrderStatus } from '../dto/create-order.dto';
 import { UpdateOrderStatusDto } from '../dto/update-order-status.dto';
 import { NotificationService } from '../../../engagement/notifications/services/notification.service';
 import { FirebaseStorageService } from '../../../common/firebase/firebase-storage.service';
+import { MessagingService } from '../../../engagement/messaging/services/messaging.service';
 
 @Injectable()
 export class OrdersService {
+    private readonly logger = new Logger(OrdersService.name);
+
     constructor(
         @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
         private readonly notificationService: NotificationService,
         private readonly storageService: FirebaseStorageService,
+        private readonly messagingService: MessagingService,
     ) {}
 
     async create(dto: CreateOrderDto): Promise<Order> {
@@ -26,7 +30,20 @@ export class OrdersService {
             status: OrderStatus.PENDING,
         });
 
-        return order.save();
+        const savedOrder = await order.save();
+
+        try {
+            await this.messagingService.createConversationForOrder(
+                savedOrder._id.toString(),
+                dto.seekerId,
+                dto.providerId
+            );
+            this.logger.log(`Conversation created for order ${savedOrder._id}`);
+        } catch (error) {
+            this.logger.error(`Failed to create conversation for order ${savedOrder._id}:`, error);
+        }
+
+        return savedOrder;
     }
 
     async createFromServiceRequest(data: {
@@ -138,6 +155,46 @@ export class OrdersService {
         switch (dto.status) {
             case OrderStatus.ACCEPTED:
                 updateData.acceptedAt = new Date();
+                if (seekerId && providerId) {
+                    try {
+                        const conversation = await this.messagingService.createConversationForOrder(
+                            id,
+                            seekerId,
+                            providerId
+                        );
+                        this.logger.log(`Conversation ensured for order ${id} upon acceptance`);
+                        
+                        if (conversation && conversation._id) {
+                            try {
+                                const orderDetails = [];
+                                if (order.totalAmount) {
+                                    orderDetails.push(`Amount: ₹${order.totalAmount.toLocaleString()}`);
+                                }
+                                if (order.serviceStartDate) {
+                                    const startDate = new Date(order.serviceStartDate);
+                                    orderDetails.push(`Scheduled: ${startDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`);
+                                }
+                                
+                                const detailsText = orderDetails.length > 0 
+                                    ? `\n\nOrder Details:\n${orderDetails.join('\n')}`
+                                    : '';
+                                
+                                const messageText = `✅ Order Accepted!\n\nI've accepted your order for ${serviceName}.${detailsText}\n\nLet's coordinate the details!`;
+                                
+                                await this.messagingService.sendMessage(
+                                    conversation._id.toString(),
+                                    providerId,
+                                    { message: messageText }
+                                );
+                                this.logger.log(`Auto-message sent for order ${id} upon acceptance`);
+                            } catch (msgError) {
+                                this.logger.error(`Failed to send auto-message for order ${id}:`, msgError);
+                            }
+                        }
+                    } catch (error) {
+                        this.logger.error(`Failed to ensure conversation exists for order ${id}:`, error);
+                    }
+                }
                 break;
             case OrderStatus.PAID:
                 updateData.paidAt = new Date();

@@ -6,6 +6,7 @@ import { ProviderDiscoveryService } from './provider-discovery.service';
 import { NotificationService } from '../../../engagement/notifications/services/notification.service';
 import { ListingsService } from '../../listings/services/listings.service';
 import { OrdersService } from '../../../transactions/service-requests/services/orders.service';
+import { MessagingService } from '../../../engagement/messaging/services/messaging.service';
 import { WAVE_CONFIG } from '../../../common/config/waves.config';
 
 export interface WaveProcessingResult {
@@ -35,7 +36,8 @@ export class MatchesOrchestratorService {
         private readonly notificationService: NotificationService,
         private readonly listingsService: ListingsService,
         @Inject(forwardRef(() => OrdersService))
-        private readonly ordersService: OrdersService
+        private readonly ordersService: OrdersService,
+        private readonly messagingService: MessagingService
     ) {}
 
     /**
@@ -296,6 +298,17 @@ export class MatchesOrchestratorService {
             },
           }
         );
+
+        try {
+            await this.messagingService.createConversationForOrder(
+                (order as any)._id.toString(),
+                request.seekerId.toString(),
+                providerId
+            );
+            this.logger.log(`Conversation created for order ${(order as any)._id}`);
+        } catch (error) {
+            this.logger.error(`Failed to create conversation for order ${(order as any)._id}:`, error);
+        }
 
         // Notify seeker about acceptance
         await this.notificationService.notifySeekerAccepted(request.seekerId.toString(), {
