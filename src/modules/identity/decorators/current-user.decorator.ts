@@ -5,8 +5,13 @@ import { createParamDecorator, ExecutionContext } from '@nestjs/common';
  * User is attached to request by FirebaseAuthGuard
  */
 export const CurrentUser = createParamDecorator(
-    (data: unknown, ctx: ExecutionContext) => {
+    (data: string | undefined, ctx: ExecutionContext) => {
         const request = ctx.switchToHttp().getRequest();
-        return request.user;
+        const user = request.user;
+                if (data && user) {
+                     return user[data];
+                 }
+        
+        return user;
     },
 );

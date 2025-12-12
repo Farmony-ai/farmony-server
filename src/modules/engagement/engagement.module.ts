@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { NotificationsModule } from './notifications/notifications.module';
+import { MessagingModule } from './messaging/messaging.module';
 
 /**
  * Engagement Module - User Interactions Domain
@@ -12,9 +13,11 @@ import { NotificationsModule } from './notifications/notifications.module';
 @Module({
     imports: [
         NotificationsModule,
+        MessagingModule,
     ],
     exports: [
         NotificationsModule,
+        MessagingModule,
     ],
 })
 export class EngagementModule {}

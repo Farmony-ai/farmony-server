@@ -9,6 +9,7 @@ import { Listing, ListingSchema } from '../listings/schemas/listings.schema';
 import { CommonModule } from '../../common/common.module';
 import { IdentityModule } from '../../identity/identity.module';
 import { EngagementModule } from '../../engagement/engagement.module';
+import { MessagingModule } from '../../engagement/messaging/messaging.module';
 import { TransactionsModule } from '../../transactions/transactions.module';
 import { ListingsModule } from '../listings/listings.module';
 import { MatchesService } from './services/matches.service';
@@ -22,6 +23,7 @@ import { MatchesController } from './controllers/matches.controller';
         CommonModule,
         IdentityModule,
         EngagementModule,
+        MessagingModule,
         forwardRef(() => TransactionsModule),
         forwardRef(() => ListingsModule),
         MongooseModule.forFeature([
